@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
-import 'package:video_player/video_player.dart';
+import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import '../models/content_item.dart';
 import '../services/iptv_service.dart';
 
@@ -17,7 +17,7 @@ class PlayerScreen extends StatefulWidget {
 }
 
 class _PlayerScreenState extends State<PlayerScreen> {
-  late VideoPlayerController _controller;
+  VlcPlayerController? _controller;
   bool _isLoading = true;
   bool _hasError = false;
   String _errorMessage = '';
@@ -43,38 +43,44 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _errorMessage = '';
       });
 
-      // Stream URL'ini al
-      final streamUrl = await _iptvService.getStreamUrl(
-        streamId: widget.contentItem.id,
-        streamType: widget.contentItem.streamType == 'live' ? 'live' : 'movie',
-      );
-
+      final streamUrl = 'http://mavi.goodxtv.com:8080/live/456125yusuf/478547tunc/123818.ts';
+      
       print('Debug - Stream URL: $streamUrl');
+      print('Debug - Content Type: ${widget.contentItem.streamType}');
+      print('Debug - Content ID: ${widget.contentItem.id}');
 
-      if (streamUrl == null) {
-        setState(() {
-          _hasError = true;
-          _errorMessage = 'Yayın URL\'i alınamadı';
-          _isLoading = false;
-        });
-        return;
+      if (streamUrl.isEmpty) {
+        throw Exception('Stream URL boş');
       }
 
-      _controller = VideoPlayerController.networkUrl(Uri.parse(streamUrl));
+      // Önceki controller'ı temizle
+      await _controller?.dispose();
       
-      print('Debug - Video controller oluşturuldu');
-      
-      await _controller.initialize();
-      
-      print('Debug - Video controller başlatıldı');
-      
-      await _controller.play();
+      // Yeni controller oluştur
+      _controller = VlcPlayerController.network(
+        streamUrl,
+        autoPlay: true,
+        options: VlcPlayerOptions(
+          advanced: VlcAdvancedOptions([
+            VlcAdvancedOptions.networkCaching(2000),
+          ]),
+          http: VlcHttpOptions([
+            VlcHttpOptions.httpReconnect(true),
+          ]),
+          video: VlcVideoOptions([
+            VlcVideoOptions.dropLateFrames(true),
+            VlcVideoOptions.skipFrames(true),
+          ]),
+        ),
+      );
 
       setState(() {
         _isLoading = false;
       });
+
     } catch (e) {
       print('Debug - Hata oluştu: $e');
+      print('Debug - Hata türü: ${e.runtimeType}');
       setState(() {
         _hasError = true;
         _errorMessage = 'Video oynatıcı başlatılamadı: ${e.toString()}';
@@ -85,7 +91,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   void dispose() {
-    _controller.dispose();
+    _controller?.dispose();
     // Normal ekran moduna dön
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
@@ -96,17 +102,33 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      body: _buildBody(),
+    return WillPopScope(
+      onWillPop: () async {
+        await _controller?.stop();
+        return true;
+      },
+      child: Scaffold(
+        backgroundColor: Colors.black,
+        body: _buildBody(),
+      ),
     );
   }
 
   Widget _buildBody() {
     if (_isLoading) {
       return const Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+        child: Column(
+          mainAxisAlignment: MainAxisAlignment.center,
+          children: [
+            CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+            ),
+            SizedBox(height: 16),
+            Text(
+              'Video yükleniyor...',
+              style: TextStyle(color: Colors.white),
+            ),
+          ],
         ),
       );
     }
@@ -122,25 +144,41 @@ class _PlayerScreenState extends State<PlayerScreen> {
               size: 60,
             ),
             const SizedBox(height: 16),
-            Text(
-              _errorMessage,
-              style: const TextStyle(color: Colors.white),
-              textAlign: TextAlign.center,
+            Padding(
+              padding: const EdgeInsets.symmetric(horizontal: 24),
+              child: Text(
+                _errorMessage,
+                style: const TextStyle(color: Colors.white),
+                textAlign: TextAlign.center,
+              ),
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: _initializePlayer,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue,
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               ),
               child: const Text('Tekrar Dene'),
             ),
             const SizedBox(height: 12),
             TextButton(
               onPressed: () => Navigator.pop(context),
-              child: const Text('Geri Dön'),
+              child: const Text(
+                'Geri Dön',
+                style: TextStyle(color: Colors.white),
+              ),
             ),
           ],
+        ),
+      );
+    }
+
+    if (_controller == null) {
+      return const Center(
+        child: Text(
+          'Video oynatıcı hazırlanamadı',
+          style: TextStyle(color: Colors.white),
         ),
       );
     }
@@ -149,9 +187,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
       children: [
         // Video Player
         Center(
-          child: AspectRatio(
-            aspectRatio: _controller.value.aspectRatio,
-            child: VideoPlayer(_controller),
+          child: VlcPlayer(
+            controller: _controller!,
+            aspectRatio: 16 / 9,
+            placeholder: const Center(
+              child: CircularProgressIndicator(),
+            ),
           ),
         ),
         
@@ -168,14 +209,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
               children: [
                 IconButton(
                   icon: Icon(
-                    _controller.value.isPlaying ? Icons.pause : Icons.play_arrow,
+                    _controller!.value.isPlaying ? Icons.pause : Icons.play_arrow,
                     color: Colors.white,
                   ),
                   onPressed: () {
                     setState(() {
-                      _controller.value.isPlaying
-                          ? _controller.pause()
-                          : _controller.play();
+                      _controller!.value.isPlaying
+                          ? _controller!.pause()
+                          : _controller!.play();
                     });
                   },
                 ),
