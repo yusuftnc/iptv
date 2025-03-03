@@ -19,12 +19,14 @@ class ContentItem {
 
   factory ContentItem.fromJson(Map<String, dynamic> json, String type) {
     return ContentItem(
-      id: json['stream_id']?.toString() ?? '',
+      id: json['stream_id']?.toString() ?? json['series_id']?.toString() ?? '',
       name: json['name'] ?? '',
       streamType: type,
-      streamIcon: json['stream_icon'] ?? '',
+      streamIcon: type == 'series' 
+          ? json['cover'] ?? '' 
+          : json['stream_icon'] ?? '',
       streamUrl: json['stream_url'] ?? '',
-      description: json['description'] ?? '',
+      description: json['description'] ?? json['plot'] ?? '',
       category: json['category_id']?.toString() ?? '',
     );
   }

@@ -15,15 +15,14 @@ class MyApp extends StatelessWidget {
     return MaterialApp(
       title: 'IPTV App',
       theme: ThemeData(
-        colorScheme: ColorScheme.fromSeed(seedColor: Colors.blue),
+        colorScheme: ColorScheme.fromSeed(
+          seedColor: Colors.blue,
+          brightness: Brightness.dark,
+        ),
         useMaterial3: true,
       ),
-      initialRoute: '/',
-      routes: {
-        '/': (context) => const SplashScreen(),
-        '/login': (context) => const LoginScreen(),
-        '/home': (context) => const HomeScreen(),
-      },
+      home: const SplashScreen(),
+      debugShowCheckedModeBanner: false,
     );
   }
 }
