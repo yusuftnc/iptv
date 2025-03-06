@@ -18,15 +18,27 @@ class ContentItem {
   });
 
   factory ContentItem.fromJson(Map<String, dynamic> json, String type) {
+    // Diziler için farklı alan isimleri kullanılabilir
+    if (type == 'series') {
+      return ContentItem(
+        id: json['series_id']?.toString() ?? '',
+        name: json['name'] ?? '',
+        streamType: type,
+        streamIcon: json['cover'] ?? json['backdrop_path'] ?? json['poster'] ?? json['stream_icon'] ?? '',
+        streamUrl: '', // Diziler için stream URL doğrudan gelmeyebilir
+        description: json['plot'] ?? json['overview'] ?? json['description'] ?? '',
+        category: json['category_id']?.toString() ?? '',
+      );
+    }
+    
+    // TV kanalları ve filmler için
     return ContentItem(
-      id: json['stream_id']?.toString() ?? json['series_id']?.toString() ?? '',
+      id: json['stream_id']?.toString() ?? '',
       name: json['name'] ?? '',
       streamType: type,
-      streamIcon: type == 'series' 
-          ? json['cover'] ?? '' 
-          : json['stream_icon'] ?? '',
+      streamIcon: json['stream_icon'] ?? '',
       streamUrl: json['stream_url'] ?? '',
-      description: json['description'] ?? json['plot'] ?? '',
+      description: json['description'] ?? '',
       category: json['category_id']?.toString() ?? '',
     );
   }

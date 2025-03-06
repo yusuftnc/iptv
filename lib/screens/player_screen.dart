@@ -1,15 +1,15 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
-import '../models/content_item.dart';
-import '../services/iptv_service.dart';
 
 class PlayerScreen extends StatefulWidget {
-  final ContentItem contentItem;
+  final String streamUrl;
+  final String title;
 
   const PlayerScreen({
     super.key,
-    required this.contentItem,
+    required this.streamUrl,
+    required this.title,
   });
 
   @override
@@ -17,48 +17,17 @@ class PlayerScreen extends StatefulWidget {
 }
 
 class _PlayerScreenState extends State<PlayerScreen> {
-  VlcPlayerController? _controller;
-  bool _isLoading = true;
-  bool _hasError = false;
-  String _errorMessage = '';
-  final IptvService _iptvService = IptvService();
+  late VlcPlayerController _controller;
+  bool _isPlaying = true;
 
   @override
   void initState() {
     super.initState();
-    _initializePlayer();
-    // Tam ekran modu
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-  }
-
-  Future<void> _initializePlayer() async {
+    
     try {
-      setState(() {
-        _isLoading = true;
-        _hasError = false;
-        _errorMessage = '';
-      });
-
-      final streamUrl = 'http://mavi.goodxtv.com:8080/live/456125yusuf/478547tunc/123818.ts';
-      
-      print('Debug - Stream URL: $streamUrl');
-      print('Debug - Content Type: ${widget.contentItem.streamType}');
-      print('Debug - Content ID: ${widget.contentItem.id}');
-
-      if (streamUrl.isEmpty) {
-        throw Exception('Stream URL boş');
-      }
-
-      // Önceki controller'ı temizle
-      await _controller?.dispose();
-      
-      // Yeni controller oluştur
       _controller = VlcPlayerController.network(
-        streamUrl,
+        widget.streamUrl,
+        hwAcc: HwAcc.full,
         autoPlay: true,
         options: VlcPlayerOptions(
           advanced: VlcAdvancedOptions([
@@ -73,25 +42,45 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ]),
         ),
       );
-
-      setState(() {
-        _isLoading = false;
+      
+      // Hata dinleyicisi ekle - VLC player'ın desteklediği bir yöntem kullanıyoruz
+      _controller.addOnInitListener(() {
+        print('VLC player initialized successfully');
       });
-
+      
+      // VLC player'da addOnErrorListener metodu yok, bu yüzden try-catch kullanıyoruz
     } catch (e) {
-      print('Debug - Hata oluştu: $e');
-      print('Debug - Hata türü: ${e.runtimeType}');
-      setState(() {
-        _hasError = true;
-        _errorMessage = 'Video oynatıcı başlatılamadı: ${e.toString()}';
-        _isLoading = false;
+      print('VLC player initialization error: $e');
+      // Hata durumunda kullanıcıya bilgi ver ve geri dön
+      Future.microtask(() {
+        if (mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Video oynatıcı başlatılamadı: $e')),
+          );
+          Navigator.pop(context);
+        }
       });
+      return;
     }
+
+    // Tam ekran moduna geç
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   }
 
   @override
   void dispose() {
-    _controller?.dispose();
+    try {
+      if (_controller != null) {
+        _controller.dispose();
+      }
+    } catch (e) {
+      print('VLC player dispose error: $e');
+    }
+    
     // Normal ekran moduna dön
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.portraitUp,
@@ -102,158 +91,125 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
-        await _controller?.stop();
-        return true;
-      },
-      child: Scaffold(
-        backgroundColor: Colors.black,
-        body: _buildBody(),
+    return Scaffold(
+      backgroundColor: Colors.black,
+      body: SafeArea(
+        child: Stack(
+          children: [
+            // Video Player
+            Center(
+              child: Builder(
+                builder: (context) {
+                  try {
+                    return VlcPlayer(
+                      controller: _controller,
+                      aspectRatio: 16 / 9,
+                      placeholder: const Center(
+                        child: CircularProgressIndicator(),
+                      ),
+                    );
+                  } catch (e) {
+                    print('VLC player build error: $e');
+                    // Hata durumunda basit bir hata mesajı göster
+                    return Center(
+                      child: Column(
+                        mainAxisAlignment: MainAxisAlignment.center,
+                        children: [
+                          const Icon(Icons.error_outline, size: 50, color: Colors.red),
+                          const SizedBox(height: 16),
+                          Text(
+                            'Video oynatılamıyor: $e',
+                            style: const TextStyle(color: Colors.white),
+                            textAlign: TextAlign.center,
+                          ),
+                          const SizedBox(height: 16),
+                          ElevatedButton(
+                            onPressed: () => Navigator.pop(context),
+                            child: const Text('Geri Dön'),
+                          ),
+                        ],
+                      ),
+                    );
+                  }
+                },
+              ),
+            ),
+            
+            // Kontroller
+            Positioned(
+              bottom: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10),
+                color: Colors.black54,
+                child: Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceEvenly,
+                  children: [
+                    IconButton(
+                      icon: Icon(
+                        _isPlaying ? Icons.pause : Icons.play_arrow,
+                        color: Colors.white,
+                        size: 30,
+                      ),
+                      onPressed: () {
+                        setState(() {
+                          if (_isPlaying) {
+                            _controller.pause();
+                          } else {
+                            _controller.play();
+                          }
+                          _isPlaying = !_isPlaying;
+                        });
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.stop,
+                        color: Colors.white,
+                        size: 30,
+                      ),
+                      onPressed: () {
+                        _controller.stop();
+                        Navigator.pop(context);
+                      },
+                    ),
+                    IconButton(
+                      icon: const Icon(
+                        Icons.fullscreen_exit,
+                        color: Colors.white,
+                        size: 30,
+                      ),
+                      onPressed: () {
+                        Navigator.pop(context);
+                      },
+                    ),
+                  ],
+                ),
+              ),
+            ),
+            
+            // Başlık
+            Positioned(
+              top: 0,
+              left: 0,
+              right: 0,
+              child: Container(
+                padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 15),
+                color: Colors.black54,
+                child: Text(
+                  widget.title,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ),
+          ],
+        ),
       ),
-    );
-  }
-
-  Widget _buildBody() {
-    if (_isLoading) {
-      return const Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
-            ),
-            SizedBox(height: 16),
-            Text(
-              'Video yükleniyor...',
-              style: TextStyle(color: Colors.white),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_hasError) {
-      return Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            const Icon(
-              Icons.error_outline,
-              color: Colors.red,
-              size: 60,
-            ),
-            const SizedBox(height: 16),
-            Padding(
-              padding: const EdgeInsets.symmetric(horizontal: 24),
-              child: Text(
-                _errorMessage,
-                style: const TextStyle(color: Colors.white),
-                textAlign: TextAlign.center,
-              ),
-            ),
-            const SizedBox(height: 24),
-            ElevatedButton(
-              onPressed: _initializePlayer,
-              style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-              ),
-              child: const Text('Tekrar Dene'),
-            ),
-            const SizedBox(height: 12),
-            TextButton(
-              onPressed: () => Navigator.pop(context),
-              child: const Text(
-                'Geri Dön',
-                style: TextStyle(color: Colors.white),
-              ),
-            ),
-          ],
-        ),
-      );
-    }
-
-    if (_controller == null) {
-      return const Center(
-        child: Text(
-          'Video oynatıcı hazırlanamadı',
-          style: TextStyle(color: Colors.white),
-        ),
-      );
-    }
-
-    return Stack(
-      children: [
-        // Video Player
-        Center(
-          child: VlcPlayer(
-            controller: _controller!,
-            aspectRatio: 16 / 9,
-            placeholder: const Center(
-              child: CircularProgressIndicator(),
-            ),
-          ),
-        ),
-        
-        // Kontroller
-        Positioned(
-          bottom: 0,
-          left: 0,
-          right: 0,
-          child: Container(
-            padding: const EdgeInsets.symmetric(vertical: 8),
-            color: Colors.black54,
-            child: Row(
-              mainAxisAlignment: MainAxisAlignment.center,
-              children: [
-                IconButton(
-                  icon: Icon(
-                    _controller!.value.isPlaying ? Icons.pause : Icons.play_arrow,
-                    color: Colors.white,
-                  ),
-                  onPressed: () {
-                    setState(() {
-                      _controller!.value.isPlaying
-                          ? _controller!.pause()
-                          : _controller!.play();
-                    });
-                  },
-                ),
-                IconButton(
-                  icon: const Icon(
-                    Icons.fullscreen_exit,
-                    color: Colors.white,
-                  ),
-                  onPressed: () {
-                    Navigator.pop(context);
-                  },
-                ),
-              ],
-            ),
-          ),
-        ),
-        
-        // İçerik adı
-        Positioned(
-          top: 20,
-          left: 20,
-          child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-            decoration: BoxDecoration(
-              color: Colors.black54,
-              borderRadius: BorderRadius.circular(4),
-            ),
-            child: Text(
-              widget.contentItem.name,
-              style: const TextStyle(
-                color: Colors.white,
-                fontSize: 16,
-              ),
-            ),
-          ),
-        ),
-      ],
     );
   }
 } 
