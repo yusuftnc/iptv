@@ -102,10 +102,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return WillPopScope(
-      onWillPop: () async {
-        await _controller?.stop();
-        return true;
+    return PopScope(
+      onPopInvoked: (didPop) async {
+        if (_controller != null) {
+          await _controller!.stop();
+        }
       },
       child: Scaffold(
         backgroundColor: Colors.black,

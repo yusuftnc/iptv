@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/content_item.dart';
 import '../services/iptv_service.dart';
@@ -132,78 +133,98 @@ class _HomeScreenState extends State<HomeScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: Colors.black,
-      appBar: AppBar(
-        title: Text(_selectedCategoryName.isNotEmpty 
-            ? _selectedCategoryName 
-            : _currentIndex == 0 
-                ? 'Yeniler' 
-                : _currentIndex == 1 
-                    ? 'TV Kanalları' 
-                    : _currentIndex == 2 
-                        ? 'Filmler' 
-                        : 'Diziler'),
-        backgroundColor: Colors.blue,
-        leading: _selectedCategoryName.isNotEmpty 
-            ? IconButton(
-                icon: const Icon(Icons.arrow_back),
-                onPressed: () {
-                  setState(() {
-                    _selectedCategoryName = '';
-                    _selectedCategoryId = '';
-                    _selectedCategoryContent = [];
-                  });
-                },
-              ) 
-            : null,
-        actions: [
-          IconButton(
-            icon: const Icon(Icons.refresh),
-            onPressed: _loadContent,
-            tooltip: 'Yenile',
-          ),
-          IconButton(
-            icon: const Icon(Icons.logout),
-            onPressed: () => _showLogoutDialog(),
-            tooltip: 'Çıkış Yap',
-          ),
-        ],
-      ),
-      body: _buildBody(),
-      bottomNavigationBar: BottomNavigationBar(
-        currentIndex: _currentIndex,
-        onTap: (index) {
+    return PopScope(
+      canPop: false,
+      onPopInvoked: (didPop) {
+        if (didPop) {
+          return;
+        }
+        
+        if (_selectedCategoryName.isNotEmpty) {
+          // Eğer bir kategori içeriği görüntüleniyorsa, kategori listesine geri dön
           setState(() {
-            _currentIndex = index;
             _selectedCategoryName = '';
             _selectedCategoryId = '';
             _selectedCategoryContent = [];
           });
-          _loadContent();
-        },
-        type: BottomNavigationBarType.fixed,
+        } else {
+          // Ana ekrandaysa, çıkış onayı diyaloğunu göster
+          _showExitDialog();
+        }
+      },
+      child: Scaffold(
         backgroundColor: Colors.black,
-        selectedItemColor: Colors.blue,
-        unselectedItemColor: Colors.grey,
-        items: const [
-          BottomNavigationBarItem(
-            icon: Icon(Icons.new_releases),
-            label: 'Yeniler',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.tv),
-            label: 'TV Kanalları',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.movie),
-            label: 'Filmler',
-          ),
-          BottomNavigationBarItem(
-            icon: Icon(Icons.video_library),
-            label: 'Diziler',
-          ),
-        ],
+        appBar: AppBar(
+          title: Text(_selectedCategoryName.isNotEmpty 
+              ? _selectedCategoryName 
+              : _currentIndex == 0 
+                  ? 'Yeniler' 
+                  : _currentIndex == 1 
+                      ? 'TV Kanalları' 
+                      : _currentIndex == 2 
+                          ? 'Filmler' 
+                          : 'Diziler'),
+          backgroundColor: Colors.blue,
+          leading: _selectedCategoryName.isNotEmpty 
+              ? IconButton(
+                  icon: const Icon(Icons.arrow_back),
+                  onPressed: () {
+                    setState(() {
+                      _selectedCategoryName = '';
+                      _selectedCategoryId = '';
+                      _selectedCategoryContent = [];
+                    });
+                  },
+                ) 
+              : null,
+          actions: [
+            IconButton(
+              icon: const Icon(Icons.refresh),
+              onPressed: _loadContent,
+              tooltip: 'Yenile',
+            ),
+            IconButton(
+              icon: const Icon(Icons.logout),
+              onPressed: () => _showLogoutDialog(),
+              tooltip: 'Çıkış Yap',
+            ),
+          ],
+        ),
+        body: _buildBody(),
+        bottomNavigationBar: BottomNavigationBar(
+          currentIndex: _currentIndex,
+          onTap: (index) {
+            setState(() {
+              _currentIndex = index;
+              _selectedCategoryName = '';
+              _selectedCategoryId = '';
+              _selectedCategoryContent = [];
+            });
+            _loadContent();
+          },
+          type: BottomNavigationBarType.fixed,
+          backgroundColor: Colors.black,
+          selectedItemColor: Colors.blue,
+          unselectedItemColor: Colors.grey,
+          items: const [
+            BottomNavigationBarItem(
+              icon: Icon(Icons.new_releases),
+              label: 'Yeniler',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.tv),
+              label: 'TV Kanalları',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.movie),
+              label: 'Filmler',
+            ),
+            BottomNavigationBarItem(
+              icon: Icon(Icons.video_library),
+              label: 'Diziler',
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -429,22 +450,48 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _showLogoutDialog() {
+    _showConfirmationDialog(
+      title: 'Çıkış Yap',
+      content: 'Hesabınızdan çıkış yapmak istediğinize emin misiniz?',
+      confirmText: 'Çıkış Yap',
+      onConfirm: _logout,
+    );
+  }
+
+  void _showExitDialog() {
+    _showConfirmationDialog(
+      title: 'Uygulamadan Çık',
+      content: 'Uygulamadan çıkmak istediğinize emin misiniz?',
+      confirmText: 'Çıkış',
+      onConfirm: () {
+        SystemNavigator.pop(); // Uygulamadan çık
+      },
+    );
+  }
+
+  void _showConfirmationDialog({
+    required String title,
+    required String content,
+    required String confirmText,
+    required VoidCallback onConfirm,
+    String cancelText = 'İptal',
+  }) {
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Çıkış Yap'),
-        content: const Text('Hesabınızdan çıkış yapmak istediğinize emin misiniz?'),
+        title: Text(title),
+        content: Text(content),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context),
-            child: const Text('İptal'),
+            child: Text(cancelText),
           ),
           TextButton(
             onPressed: () {
               Navigator.pop(context);
-              _logout();
+              onConfirm();
             },
-            child: const Text('Çıkış Yap'),
+            child: Text(confirmText),
           ),
         ],
       ),
