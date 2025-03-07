@@ -53,11 +53,46 @@ class _PlayerScreenState extends State<PlayerScreen> {
       } else {
         // Yoksa, servis üzerinden URL'i al
         final streamType = widget.contentItem.streamType ?? 'live';
-                
-        streamUrl = await _iptvService.getStreamUrl(
-          streamId: widget.contentItem.id,
-          streamType: streamType,
-        );
+        
+        // Eğer dizi bölümü ise, özel işlem yap
+        if (streamType == 'series' && widget.contentItem.id.isNotEmpty) {
+          // Dizi bölüm ID'sini kullanarak stream URL'ini al
+          streamUrl = await _iptvService.getStreamUrl(
+            streamId: widget.contentItem.id,
+            streamType: 'series',
+          );
+          
+          // Eğer URL alınamazsa, alternatif formatları dene
+          if (streamUrl == null || streamUrl.isEmpty) {
+            final serverUrl = _iptvService.getServerUrl();
+            final username = _iptvService.getUsername();
+            final password = _iptvService.getPassword();
+            
+            if (serverUrl != null && username != null && password != null) {
+              // Farklı formatları dene
+              final formats = [
+                '$serverUrl/series/$username/$password/${widget.contentItem.id}.mp4',
+                '$serverUrl/series/$username/$password/${widget.contentItem.id}.mkv',
+                '$serverUrl/series/$username/$password/${widget.contentItem.id}.ts',
+                '$serverUrl/series/$username/$password/${widget.contentItem.id}.m3u8',
+                '$serverUrl/series/$username/$password/series/${widget.contentItem.id}.mp4',
+                '$serverUrl/series/$username/$password/series/${widget.contentItem.id}.mkv',
+                '$serverUrl/series/$username/$password/series/${widget.contentItem.id}.ts',
+                '$serverUrl/series/$username/$password/series/${widget.contentItem.id}.m3u8',
+              ];
+              
+              // İlk formatı kullan (daha sonra diğerlerini deneyebiliriz)
+              streamUrl = formats.first;
+              print('Debug - Alternatif URL kullanılıyor: $streamUrl');
+            }
+          }
+        } else {
+          // Normal içerik için stream URL'ini al
+          streamUrl = await _iptvService.getStreamUrl(
+            streamId: widget.contentItem.id,
+            streamType: streamType,
+          );
+        }
         
         print('Debug - Servis üzerinden URL alındı: $streamUrl');
       }

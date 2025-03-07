@@ -35,9 +35,18 @@ class IptvService {
     'series': [
       '{server}/series/{user}/{pass}/{id}.mp4',
       '{server}/series/{user}/{pass}/{id}.mkv',
+      '{server}/series/{user}/{pass}/{id}.ts',
+      '{server}/series/{user}/{pass}/{id}.m3u8',
+      '{server}/series/{user}/{pass}/{id}',
+      '{server}/series/{user}/{pass}/{id}/index.m3u8',
+      '{server}/series/{user}/{pass}/series/{id}.mp4',
+      '{server}/series/{user}/{pass}/series/{id}.mkv',
+      '{server}/series/{user}/{pass}/series/{id}.ts',
+      '{server}/series/{user}/{pass}/series/{id}.m3u8',
+      '{server}/streaming/series/{id}?username={user}&password={pass}',
+      '{server}/player_api.php?username={user}&password={pass}&action=get_series_info&series_id={id}',
       '{server}/vod/{user}/{pass}/{id}.mp4',
       '{server}/vod/{user}/{pass}/{id}.mkv',
-      '{server}/streaming/series/{id}?username={user}&password={pass}',
       '{server}/{user}/{pass}/{id}'
     ]
   };
@@ -46,6 +55,11 @@ class IptvService {
   static final IptvService _instance = IptvService._internal();
   factory IptvService() => _instance;
   IptvService._internal();
+
+  // Getter metodları
+  String? getServerUrl() => _serverUrl;
+  String? getUsername() => _username;
+  String? getPassword() => _password;
 
   Future<void> initialize({
     required String host,
@@ -442,6 +456,57 @@ class IptvService {
     } catch (e) {
       print('Get Series error: $e');
       return [];
+    }
+  }
+
+  // Dizi detaylarını getir
+  Future<Map<String, dynamic>> getSeriesInfo(String seriesId) async {
+    try {
+      final uri = Uri.parse('$_serverUrl/player_api.php').replace(
+        queryParameters: {
+          'username': _username,
+          'password': _password,
+          'action': 'get_series_info',
+          'series_id': seriesId,
+        },
+      );
+
+      final response = await http.get(uri);
+
+      if (response.statusCode == 200) {
+        final Map<String, dynamic> data = json.decode(response.body);
+        return data;
+      }
+      return {};
+    } catch (e) {
+      print('Get Series Info error: $e');
+      return {};
+    }
+  }
+
+  // Dizi bölümlerini getir
+  Future<Map<String, List<Map<String, dynamic>>>> getSeriesEpisodes(String seriesId) async {
+    try {
+      // Önce dizi bilgilerini al
+      final seriesInfo = await getSeriesInfo(seriesId);
+      
+      if (seriesInfo.isEmpty || seriesInfo['episodes'] == null) {
+        return {};
+      }
+      
+      // Sezonlara göre bölümleri grupla
+      final Map<String, List<Map<String, dynamic>>> episodesBySeason = {};
+      final Map<String, dynamic> episodes = seriesInfo['episodes'];
+      
+      episodes.forEach((seasonKey, seasonEpisodes) {
+        final List<dynamic> episodesList = seasonEpisodes;
+        episodesBySeason[seasonKey] = episodesList.map((e) => e as Map<String, dynamic>).toList();
+      });
+      
+      return episodesBySeason;
+    } catch (e) {
+      print('Get Series Episodes error: $e');
+      return {};
     }
   }
 

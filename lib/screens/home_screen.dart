@@ -6,6 +6,7 @@ import '../services/iptv_service.dart';
 import '../services/storage_service.dart';
 import 'login_screen.dart';
 import 'player_screen.dart';
+import 'series_detail_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -441,12 +442,23 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   void _playContent(ContentItem item) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => PlayerScreen(contentItem: item),
-      ),
-    );
+    // Eğer içerik türü dizi ise, dizi detay ekranına yönlendir
+    if (item.streamType == 'series') {
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => SeriesDetailScreen(seriesItem: item),
+        ),
+      );
+    } else {
+      // Diğer içerik türleri için doğrudan oynatıcıya yönlendir
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => PlayerScreen(contentItem: item),
+        ),
+      );
+    }
   }
 
   void _showLogoutDialog() {
