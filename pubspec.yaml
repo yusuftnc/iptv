@@ -13,7 +13,7 @@ dependencies:
   http: ^1.1.0
   provider: ^6.0.0
   flutter_vlc_player:
-    path: ../packages/flutter_vlc_player/flutter_vlc_player
+    path: packages/flutter_vlc_player/flutter_vlc_player
   shared_preferences: ^2.2.2
   fluttertoast: ^8.0.9
   cached_network_image: ^3.2.3

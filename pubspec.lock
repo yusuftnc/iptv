@@ -190,7 +190,7 @@ packages:
   flutter_vlc_player:
     dependency: "direct main"
     description:
-      path: "../packages/flutter_vlc_player/flutter_vlc_player"
+      path: "packages/flutter_vlc_player/flutter_vlc_player"
       relative: true
     source: path
     version: "7.4.3"
