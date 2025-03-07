@@ -9,6 +9,39 @@ class IptvService {
   String? _serverUrl;
   Map<String, String> _categoryNames = {};
 
+  // Her içerik türü için çalışan formatı önbellekte tut
+  final Map<String, String> _formatCache = {};
+  
+  // Her içerik türü için olası formatlar
+  final Map<String, List<String>> _formatTemplates = {
+    'live': [
+      '{server}/live/{user}/{pass}/{id}.ts',
+      '{server}/live/{user}/{pass}/{id}.m3u8',
+      '{server}/streaming/live/{id}?username={user}&password={pass}',
+      '{server}/hls/{user}/{pass}/{id}/index.m3u8',
+      '{server}/{user}/{pass}/{id}'
+    ],
+    'movie': [
+      '{server}/movie/{user}/{pass}/{id}.mkv',
+      '{server}/movie/{user}/{pass}/{id}.mp4',
+      '{server}/vod/{user}/{pass}/{id}.mkv',
+      '{server}/vod/{user}/{pass}/{id}.mp4',
+      '{server}/vod/{user}/{pass}/{id}.avi',
+      '{server}/film/{user}/{pass}/{id}.mp4',
+      '{server}/film/{user}/{pass}/{id}.mkv',
+      '{server}/streaming/vod/{id}?username={user}&password={pass}',
+      '{server}/{user}/{pass}/{id}'
+    ],
+    'series': [
+      '{server}/series/{user}/{pass}/{id}.mp4',
+      '{server}/series/{user}/{pass}/{id}.mkv',
+      '{server}/vod/{user}/{pass}/{id}.mp4',
+      '{server}/vod/{user}/{pass}/{id}.mkv',
+      '{server}/streaming/series/{id}?username={user}&password={pass}',
+      '{server}/{user}/{pass}/{id}'
+    ]
+  };
+
   // Singleton pattern
   static final IptvService _instance = IptvService._internal();
   factory IptvService() => _instance;
@@ -25,6 +58,9 @@ class IptvService {
     _username = username;
     _password = password;
     _serverUrl = 'http://$_host:$_port';
+    
+    // Önbelleği temizle (yeni giriş yapıldığında)
+    _formatCache.clear();
   }
 
   Future<void> _loadCategories() async {
@@ -181,39 +217,85 @@ class IptvService {
   Future<String?> getStreamUrl({
     required String streamId,
     required String streamType,
-    String extension = 'ts',
   }) async {
     if (_serverUrl == null || _username == null || _password == null) {
       throw Exception('IptvService not initialized');
     }
     
-    // Modern IPTV sistemleri için XC style URL
-    final xcStyleUrl = '$_serverUrl/$streamType/$_username/$_password/$streamId.$extension';
-    
-    // Eski stil URL (bazı sistemler hala bunu kullanır)
-    final legacyStyleUrl = '$_serverUrl/streaming/$streamType/$streamId?username=$_username&password=$_password&type=$extension';
-    
-    // Önce XC style URL'i dene, çalışmazsa legacy URL'e geri dön
-    try {
-      final response = await http.head(Uri.parse(xcStyleUrl));
-      if (response.statusCode == 200) {
-        return xcStyleUrl;
+    // Önbellekte bu tür için çalışan bir format var mı?
+    if (_formatCache.containsKey(streamType)) {
+      final formatTemplate = _formatCache[streamType]!;
+      final url = _applyTemplate(formatTemplate, streamId, streamType);
+      
+      // Önbellekteki format çalışıyor mu kontrol et (opsiyonel)
+      try {
+        final response = await http.head(Uri.parse(url))
+            .timeout(const Duration(seconds: 3));
+        if (response.statusCode == 200) {
+          print('Debug - Önbellekteki format çalışıyor: $url');
+          return url; // Önbellekteki format çalışıyor
+        }
+      } catch (_) {
+        // Önbellekteki format artık çalışmıyor, önbelleği temizle
+        print('Debug - Önbellekteki format çalışmıyor, temizleniyor');
+        _formatCache.remove(streamType);
       }
-    } catch (_) {
-      // XC style URL çalışmadı, legacy URL'i dene
     }
     
-    try {
-      final response = await http.head(Uri.parse(legacyStyleUrl));
-      if (response.statusCode == 200) {
-        return legacyStyleUrl;
-      }
-    } catch (_) {
-      // Legacy URL de çalışmadı
+    // İçerik türü için olası formatları al
+    final templates = _formatTemplates[streamType] ?? [];
+    if (templates.isEmpty) {
+      // Bilinmeyen içerik türü için varsayılan format
+      final defaultUrl = '{server}/{type}/{user}/{pass}/{id}'
+          .replaceAll('{server}', _serverUrl!)
+          .replaceAll('{type}', streamType)
+          .replaceAll('{user}', _username!)
+          .replaceAll('{pass}', _password!)
+          .replaceAll('{id}', streamId);
+      
+      print('Debug - Bilinmeyen içerik türü için varsayılan URL: $defaultUrl');
+      return defaultUrl;
     }
     
-    // Hiçbir URL çalışmadıysa, varsayılan olarak XC style URL'i döndür
-    return xcStyleUrl;
+    print('Debug - ${templates.length} format deneniyor...');
+    
+    // Her formatı dene
+    for (final template in templates) {
+      final url = _applyTemplate(template, streamId, streamType);
+      
+      try {
+        print('Debug - Deneniyor: $url');
+        final response = await http.head(Uri.parse(url))
+            .timeout(const Duration(seconds: 3));
+        
+        if (response.statusCode == 200) {
+          // Çalışan formatı önbelleğe al
+          _formatCache[streamType] = template;
+          print('Debug - Çalışan format bulundu ve önbelleğe alındı: $url');
+          return url;
+        }
+      } catch (e) {
+        // Bu format çalışmadı, bir sonrakini dene
+        print('Debug - Format çalışmadı: $url, Hata: $e');
+        continue;
+      }
+    }
+    
+    // Hiçbir format çalışmadıysa, varsayılan formatı döndür
+    final defaultTemplate = templates.first;
+    final defaultUrl = _applyTemplate(defaultTemplate, streamId, streamType);
+    print('Debug - Hiçbir format çalışmadı, varsayılan döndürülüyor: $defaultUrl');
+    return defaultUrl;
+  }
+  
+  // Format şablonunu uygula
+  String _applyTemplate(String template, String streamId, String streamType) {
+    return template
+        .replaceAll('{server}', _serverUrl!)
+        .replaceAll('{user}', _username!)
+        .replaceAll('{pass}', _password!)
+        .replaceAll('{id}', streamId)
+        .replaceAll('{type}', streamType);
   }
 
   // TV Kanallarını getir

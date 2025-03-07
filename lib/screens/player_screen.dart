@@ -49,18 +49,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (widget.contentItem.streamUrl != null && widget.contentItem.streamUrl!.isNotEmpty) {
         // Eğer ContentItem'da zaten bir URL varsa, onu kullan
         streamUrl = widget.contentItem.streamUrl;
+        print('Debug - ContentItem\'dan URL kullanılıyor: $streamUrl');
       } else {
         // Yoksa, servis üzerinden URL'i al
-        final streamType = widget.contentItem.streamType == 'live' 
-            ? 'live' 
-            : widget.contentItem.streamType == 'movie' 
-                ? 'movie' 
-                : 'series';
+        final streamType = widget.contentItem.streamType ?? 'live';
                 
         streamUrl = await _iptvService.getStreamUrl(
           streamId: widget.contentItem.id,
           streamType: streamType,
         );
+        
+        print('Debug - Servis üzerinden URL alındı: $streamUrl');
       }
       
       print('Debug - Stream URL: $streamUrl');
