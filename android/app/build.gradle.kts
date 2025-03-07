@@ -1,36 +1,22 @@
 plugins {
     id("com.android.application")
-    kotlin("android")
+    id("kotlin-android")
     // The Flutter Gradle Plugin must be applied after the Android and Kotlin Gradle plugins.
     id("dev.flutter.flutter-gradle-plugin")
 }
 
-val localProperties = java.util.Properties().apply {
-    val localPropertiesFile = rootProject.file("local.properties")
-    if (localPropertiesFile.exists()) {
-        load(localPropertiesFile.inputStream())
-    }
-}
-
-val flutterRoot = localProperties.getProperty("flutter.sdk")
-    ?: error("Flutter SDK not found. Define location with flutter.sdk in the local.properties file.")
-
 android {
     namespace = "com.example.iptv_app"
-    compileSdk = (project.findProperty("flutter.compileSdkVersion") as String).toInt()
-    ndkVersion = project.findProperty("flutter.ndkVersion") as String
+    compileSdk = 35
+    ndkVersion = "27.0.12077973"
 
     compileOptions {
-        sourceCompatibility = JavaVersion.VERSION_1_8
-        targetCompatibility = JavaVersion.VERSION_1_8
+        sourceCompatibility = JavaVersion.VERSION_11
+        targetCompatibility = JavaVersion.VERSION_11
     }
 
     kotlinOptions {
-        jvmTarget = "1.8"
-    }
-
-    sourceSets {
-        getByName("main").kotlin.srcDirs("src/main/kotlin")
+        jvmTarget = JavaVersion.VERSION_11.toString()
     }
 
     defaultConfig {
@@ -38,10 +24,10 @@ android {
         applicationId = "com.example.iptv_app"
         // You can update the following values to match your application needs.
         // For more information, see: https://flutter.dev/to/review-gradle-config.
-        minSdk = 21
-        targetSdk = (project.findProperty("flutter.targetSdkVersion") as String).toInt()
-        versionCode = 1
-        versionName = "1.0"
+        minSdk = flutter.minSdkVersion
+        targetSdk = flutter.targetSdkVersion
+        versionCode = flutter.versionCode
+        versionName = flutter.versionName
     }
 
     buildTypes {
@@ -54,9 +40,5 @@ android {
 }
 
 flutter {
-    source = ".."
-}
-
-dependencies {
-    implementation("org.jetbrains.kotlin:kotlin-stdlib-jdk7:${rootProject.extra["kotlin_version"]}")
+    source = "../.."
 }

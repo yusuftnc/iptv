@@ -193,7 +193,7 @@ packages:
       path: "../packages/flutter_vlc_player/flutter_vlc_player"
       relative: true
     source: path
-    version: "7.4.0"
+    version: "7.4.3"
   flutter_vlc_player_platform_interface:
     dependency: transitive
     description:
