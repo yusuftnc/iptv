@@ -43,14 +43,32 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _errorMessage = '';
       });
 
-      final streamUrl = 'http://mavi.goodxtv.com:8080/live/456125yusuf/478547tunc/123818.ts';
+      // İçerik türüne göre stream URL'ini al
+      String? streamUrl;
+      
+      if (widget.contentItem.streamUrl != null && widget.contentItem.streamUrl!.isNotEmpty) {
+        // Eğer ContentItem'da zaten bir URL varsa, onu kullan
+        streamUrl = widget.contentItem.streamUrl;
+      } else {
+        // Yoksa, servis üzerinden URL'i al
+        final streamType = widget.contentItem.streamType == 'live' 
+            ? 'live' 
+            : widget.contentItem.streamType == 'movie' 
+                ? 'movie' 
+                : 'series';
+                
+        streamUrl = await _iptvService.getStreamUrl(
+          streamId: widget.contentItem.id,
+          streamType: streamType,
+        );
+      }
       
       print('Debug - Stream URL: $streamUrl');
       print('Debug - Content Type: ${widget.contentItem.streamType}');
       print('Debug - Content ID: ${widget.contentItem.id}');
 
-      if (streamUrl.isEmpty) {
-        throw Exception('Stream URL boş');
+      if (streamUrl == null || streamUrl.isEmpty) {
+        throw Exception('Stream URL bulunamadı');
       }
 
       // Önceki controller'ı temizle
