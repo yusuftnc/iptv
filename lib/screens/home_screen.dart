@@ -185,7 +185,13 @@ class _HomeScreenState extends State<HomeScreen> {
               onPressed: () {
                 Navigator.push(
                   context,
-                  MaterialPageRoute(builder: (context) => const SearchScreen()),
+                  PageRouteBuilder(
+                    pageBuilder: (context, animation, secondaryAnimation) => const SearchScreen(),
+                    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                      return FadeTransition(opacity: animation, child: child);
+                    },
+                    transitionDuration: const Duration(milliseconds: 150), // Daha kısa süre
+                  ),
                 );
               },
               tooltip: 'Ara',
@@ -327,8 +333,13 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
-    return ListView.builder(
+    return ListView.separated(
       itemCount: categories.length,
+      separatorBuilder: (context, index) => const Divider(
+        color: Colors.grey,
+        height: 1,
+        indent: 70,
+      ),
       itemBuilder: (context, index) {
         final category = categories[index];
         return ListTile(
@@ -363,26 +374,40 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildCategoryContent() {
     if (_selectedCategoryContent.isEmpty) {
-      return Center(
+      return const Center(
         child: Text(
           'Bu kategoride içerik bulunamadı',
-          style: const TextStyle(color: Colors.white),
+          style: TextStyle(color: Colors.white),
         ),
       );
     }
 
+    // GridView için sabit değerler
+    const crossAxisCount = 3;
+    const childAspectRatio = 0.7;
+    const crossAxisSpacing = 8.0;
+    const mainAxisSpacing = 8.0;
+    const padding = EdgeInsets.all(8.0);
+
     return GridView.builder(
-      padding: const EdgeInsets.all(8),
+      padding: padding,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        childAspectRatio: 0.7,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
+        crossAxisCount: crossAxisCount,
+        childAspectRatio: childAspectRatio,
+        crossAxisSpacing: crossAxisSpacing,
+        mainAxisSpacing: mainAxisSpacing,
       ),
       itemCount: _selectedCategoryContent.length,
       itemBuilder: (context, index) {
         final item = _selectedCategoryContent[index];
         final contentItem = ContentItem.fromJson(item, _currentContentType);
+        
+        // İkon widget'ını önceden oluştur
+        final iconWidget = _currentContentType == 'live'
+            ? const Icon(Icons.tv, size: 30, color: Colors.white)
+            : _currentContentType == 'movie'
+                ? const Icon(Icons.movie, size: 30, color: Colors.white)
+                : const Icon(Icons.video_library, size: 30, color: Colors.white);
         
         return Card(
           clipBehavior: Clip.antiAlias,
@@ -402,29 +427,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     ),
                     errorWidget: (context, url, error) => Container(
                       color: Colors.grey[800],
-                      child: Icon(
-                        _currentContentType == 'live' 
-                            ? Icons.tv 
-                            : _currentContentType == 'movie' 
-                                ? Icons.movie 
-                                : Icons.video_library,
-                        size: 30,
-                        color: Colors.white,
-                      ),
+                      child: iconWidget,
                     ),
                   )
                 else
                   Container(
                     color: Colors.grey[800],
-                    child: Icon(
-                      _currentContentType == 'live' 
-                          ? Icons.tv 
-                          : _currentContentType == 'movie' 
-                              ? Icons.movie 
-                              : Icons.video_library,
-                      size: 30,
-                      color: Colors.white,
-                    ),
+                    child: iconWidget,
                   ),
                 Positioned(
                   bottom: 0,
@@ -457,16 +466,24 @@ class _HomeScreenState extends State<HomeScreen> {
     if (item.streamType == 'series') {
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => SeriesDetailScreen(seriesItem: item),
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => SeriesDetailScreen(seriesItem: item),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          transitionDuration: const Duration(milliseconds: 150),
         ),
       );
     } else {
       // Diğer içerik türleri için doğrudan oynatıcıya yönlendir
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => PlayerScreen(contentItem: item),
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => PlayerScreen(contentItem: item),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          transitionDuration: const Duration(milliseconds: 150),
         ),
       );
     }

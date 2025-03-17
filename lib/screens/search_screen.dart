@@ -115,15 +115,23 @@ class _SearchScreenState extends State<SearchScreen> {
     if (contentType == 'series') {
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => SeriesDetailScreen(seriesItem: contentItem),
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => SeriesDetailScreen(seriesItem: contentItem),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          transitionDuration: const Duration(milliseconds: 150),
         ),
       );
     } else {
       Navigator.push(
         context,
-        MaterialPageRoute(
-          builder: (context) => PlayerScreen(contentItem: contentItem),
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => PlayerScreen(contentItem: contentItem),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          transitionDuration: const Duration(milliseconds: 150),
         ),
       );
     }
@@ -418,8 +426,13 @@ class _SearchScreenState extends State<SearchScreen> {
           ),
         ),
         Expanded(
-          child: ListView.builder(
+          child: ListView.separated(
             itemCount: _searchHistory.length,
+            separatorBuilder: (context, index) => const Divider(
+              color: Colors.grey,
+              height: 1,
+              indent: 70,
+            ),
             itemBuilder: (context, index) {
               final query = _searchHistory[index];
               return ListTile(
@@ -523,10 +536,15 @@ class _SearchScreenState extends State<SearchScreen> {
   }
   
   Widget _buildChannelsList(List<Map<String, dynamic>> channels) {
-    return ListView.builder(
+    return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
       itemCount: channels.length,
+      separatorBuilder: (context, index) => const Divider(
+        color: Colors.grey,
+        height: 1,
+        indent: 70,
+      ),
       itemBuilder: (context, index) {
         final channel = channels[index];
         return ListTile(
@@ -572,15 +590,22 @@ class _SearchScreenState extends State<SearchScreen> {
   }
   
   Widget _buildContentGrid(List<Map<String, dynamic>> items, String contentType) {
+    // GridView için sabit değerler
+    const crossAxisCount = 3;
+    const childAspectRatio = 0.7;
+    const crossAxisSpacing = 8.0;
+    const mainAxisSpacing = 8.0;
+    const padding = EdgeInsets.all(8.0);
+    
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
-      padding: const EdgeInsets.all(8),
+      padding: padding,
       gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-        crossAxisCount: 3,
-        childAspectRatio: 0.7,
-        crossAxisSpacing: 8,
-        mainAxisSpacing: 8,
+        crossAxisCount: crossAxisCount,
+        childAspectRatio: childAspectRatio,
+        crossAxisSpacing: crossAxisSpacing,
+        mainAxisSpacing: mainAxisSpacing,
       ),
       itemCount: items.length,
       itemBuilder: (context, index) {
@@ -588,6 +613,12 @@ class _SearchScreenState extends State<SearchScreen> {
         final iconUrl = contentType == 'series'
             ? item['cover']
             : item['stream_icon'];
+        final name = item['name'] ?? 'İsimsiz İçerik';
+        
+        // İkon widget'ını önceden oluştur
+        final iconWidget = contentType == 'movie' 
+            ? const Icon(Icons.movie, size: 30, color: Colors.white)
+            : const Icon(Icons.video_library, size: 30, color: Colors.white);
         
         return Card(
           clipBehavior: Clip.antiAlias,
@@ -606,21 +637,13 @@ class _SearchScreenState extends State<SearchScreen> {
                     ),
                     errorWidget: (context, url, error) => Container(
                       color: Colors.grey[800],
-                      child: Icon(
-                        contentType == 'movie' ? Icons.movie : Icons.video_library,
-                        size: 30,
-                        color: Colors.white,
-                      ),
+                      child: iconWidget,
                     ),
                   )
                 else
                   Container(
                     color: Colors.grey[800],
-                    child: Icon(
-                      contentType == 'movie' ? Icons.movie : Icons.video_library,
-                      size: 30,
-                      color: Colors.white,
-                    ),
+                    child: iconWidget,
                   ),
                 Positioned(
                   bottom: 0,
@@ -630,7 +653,7 @@ class _SearchScreenState extends State<SearchScreen> {
                     padding: const EdgeInsets.all(4),
                     color: Colors.black54,
                     child: Text(
-                      item['name'] ?? 'İsimsiz İçerik',
+                      name,
                       style: const TextStyle(
                         color: Colors.white,
                         fontSize: 12,

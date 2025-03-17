@@ -83,8 +83,12 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     // Oynatma ekranına git
     Navigator.push(
       context,
-      MaterialPageRoute(
-        builder: (context) => PlayerScreen(contentItem: episodeItem),
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => PlayerScreen(contentItem: episodeItem),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 150),
       ),
     );
   }
@@ -343,9 +347,10 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       );
     }
     
-    return ListView.builder(
+    return ListView.separated(
       padding: const EdgeInsets.all(16),
       itemCount: episodes.length,
+      separatorBuilder: (context, index) => const SizedBox(height: 8),
       itemBuilder: (context, index) {
         final episode = episodes[index];
         final episodeNum = episode['episode_num'] ?? '';
@@ -355,7 +360,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
         
         return Card(
           color: Colors.grey[900],
-          margin: const EdgeInsets.only(bottom: 8),
+          margin: EdgeInsets.zero,
           child: ListTile(
             contentPadding: const EdgeInsets.all(8),
             leading: CircleAvatar(
