@@ -110,6 +110,15 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    // Sabit değerler
+    const double padding = 16.0;
+    const double iconSize = 80;
+    const double verticalSpacing = 16.0;
+    const double largeVerticalSpacing = 24.0;
+    const double largeIconSpacing = 30.0;
+    const double buttonVerticalPadding = 16.0;
+    const double buttonFontSize = 16.0;
+    
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
@@ -118,7 +127,7 @@ class _LoginScreenState extends State<LoginScreen> {
       ),
       body: Center(
         child: SingleChildScrollView(
-          padding: const EdgeInsets.all(16.0),
+          padding: const EdgeInsets.all(padding),
           child: Form(
             key: _formKey,
             child: Column(
@@ -127,10 +136,10 @@ class _LoginScreenState extends State<LoginScreen> {
               children: [
                 const Icon(
                   Icons.tv,
-                  size: 80,
+                  size: iconSize,
                   color: Colors.blue,
                 ),
-                const SizedBox(height: 30),
+                const SizedBox(height: largeIconSpacing),
                 TextFormField(
                   controller: _hostController,
                   decoration: const InputDecoration(
@@ -149,7 +158,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: verticalSpacing),
                 TextFormField(
                   controller: _portController,
                   decoration: const InputDecoration(
@@ -168,7 +177,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: verticalSpacing),
                 TextFormField(
                   controller: _usernameController,
                   decoration: const InputDecoration(
@@ -187,7 +196,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: verticalSpacing),
                 TextFormField(
                   controller: _passwordController,
                   decoration: const InputDecoration(
@@ -207,7 +216,7 @@ class _LoginScreenState extends State<LoginScreen> {
                     return null;
                   },
                 ),
-                const SizedBox(height: 16),
+                const SizedBox(height: verticalSpacing),
                 Row(
                   children: [
                     Checkbox(
@@ -233,10 +242,10 @@ class _LoginScreenState extends State<LoginScreen> {
                     ),
                   ],
                 ),
-                const SizedBox(height: 24),
+                const SizedBox(height: largeVerticalSpacing),
                 if (_errorMessage.isNotEmpty)
                   Padding(
-                    padding: const EdgeInsets.only(bottom: 16.0),
+                    padding: const EdgeInsets.only(bottom: verticalSpacing),
                     child: Text(
                       _errorMessage,
                       style: const TextStyle(color: Colors.red),
@@ -247,7 +256,7 @@ class _LoginScreenState extends State<LoginScreen> {
                   onPressed: _isLoading ? null : _login,
                   style: ElevatedButton.styleFrom(
                     backgroundColor: Colors.blue,
-                    padding: const EdgeInsets.symmetric(vertical: 16),
+                    padding: const EdgeInsets.symmetric(vertical: buttonVerticalPadding),
                   ),
                   child: _isLoading
                       ? const CircularProgressIndicator(
@@ -255,7 +264,7 @@ class _LoginScreenState extends State<LoginScreen> {
                         )
                       : const Text(
                           'Giriş Yap',
-                          style: TextStyle(fontSize: 16),
+                          style: TextStyle(fontSize: buttonFontSize),
                         ),
                 ),
               ],

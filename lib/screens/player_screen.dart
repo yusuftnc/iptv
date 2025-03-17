@@ -380,6 +380,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
     }
 
+    // Sabit değerler
+    const double topPadding = 20;
+    const double leftPadding = 20;
+    const double titlePaddingHorizontal = 12;
+    const double titlePaddingVertical = 6;
+    const double borderRadius = 4;
+    const double titleFontSize = 16;
+
     return Stack(
       children: [
         // Video Player
@@ -398,19 +406,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
         
         // İçerik adı
         Positioned(
-          top: 20,
-          left: 20,
+          top: topPadding,
+          left: leftPadding,
           child: Container(
-            padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+            padding: const EdgeInsets.symmetric(
+              horizontal: titlePaddingHorizontal, 
+              vertical: titlePaddingVertical
+            ),
             decoration: BoxDecoration(
               color: Colors.black54,
-              borderRadius: BorderRadius.circular(4),
+              borderRadius: BorderRadius.circular(borderRadius),
             ),
             child: Text(
               widget.contentItem.name,
               style: const TextStyle(
                 color: Colors.white,
-                fontSize: 16,
+                fontSize: titleFontSize,
               ),
             ),
           ),
@@ -430,6 +441,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
     }
     
+    // Sabit değerler
+    const double controlPaddingHorizontal = 16;
+    const double controlPaddingVertical = 8;
+    const double iconSize = 48;
+    const double playIconSize = 64;
+    const double spacing = 32;
+    
     return GestureDetector(
       onTap: _toggleControls,
       behavior: HitTestBehavior.opaque,
@@ -440,7 +458,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
           children: [
             // Üst kontrol çubuğu
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(
+                horizontal: controlPaddingHorizontal, 
+                vertical: controlPaddingVertical
+              ),
               color: Colors.black54,
               child: Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
@@ -455,16 +476,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       PopupMenuButton<String>(
                         icon: const Icon(Icons.subtitles, color: Colors.white),
                         onSelected: _setSubtitle,
-                        itemBuilder: (context) => [
-                          const PopupMenuItem(
+                        itemBuilder: (context) => const [
+                          PopupMenuItem(
                             value: 'Kapalı',
                             child: Text('Kapalı'),
                           ),
-                          const PopupMenuItem(
+                          PopupMenuItem(
                             value: 'Türkçe',
                             child: Text('Türkçe'),
                           ),
-                          const PopupMenuItem(
+                          PopupMenuItem(
                             value: 'İngilizce',
                             child: Text('İngilizce'),
                           ),
@@ -494,13 +515,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               children: [
                 IconButton(
-                  iconSize: 48,
+                  iconSize: iconSize,
                   icon: const Icon(Icons.replay_10, color: Colors.white),
                   onPressed: _seekBackward,
                 ),
-                const SizedBox(width: 32),
+                const SizedBox(width: spacing),
                 IconButton(
-                  iconSize: 64,
+                  iconSize: playIconSize,
                   icon: Icon(
                     _controller!.value.isPlaying ? Icons.pause : Icons.play_arrow,
                     color: Colors.white,
@@ -516,9 +537,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     _startHideControlsTimer();
                   },
                 ),
-                const SizedBox(width: 32),
+                const SizedBox(width: spacing),
                 IconButton(
-                  iconSize: 48,
+                  iconSize: iconSize,
                   icon: const Icon(Icons.forward_10, color: Colors.white),
                   onPressed: _seekForward,
                 ),
@@ -527,7 +548,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
             
             // Alt kontrol çubuğu - İlerleme çubuğu ve ses kontrolü
             Container(
-              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              padding: const EdgeInsets.symmetric(
+                horizontal: controlPaddingHorizontal, 
+                vertical: controlPaddingVertical
+              ),
               color: Colors.black54,
               child: Column(
                 children: [
