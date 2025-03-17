@@ -7,6 +7,7 @@ import '../services/storage_service.dart';
 import 'login_screen.dart';
 import 'player_screen.dart';
 import 'series_detail_screen.dart';
+import 'search_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -179,6 +180,16 @@ class _HomeScreenState extends State<HomeScreen> {
                 ) 
               : null,
           actions: [
+            IconButton(
+              icon: const Icon(Icons.search),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (context) => const SearchScreen()),
+                );
+              },
+              tooltip: 'Ara',
+            ),
             IconButton(
               icon: const Icon(Icons.refresh),
               onPressed: _loadContent,

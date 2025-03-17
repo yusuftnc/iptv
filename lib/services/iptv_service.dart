@@ -1,5 +1,6 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 class IptvService {
   String? _host;
@@ -8,6 +9,9 @@ class IptvService {
   String? _password;
   String? _serverUrl;
   Map<String, String> _categoryNames = {};
+  
+  // Arama geçmişi için anahtar
+  static const String _searchHistoryKey = 'search_history';
 
   // Her içerik türü için çalışan formatı önbellekte tut
   final Map<String, String> _formatCache = {};
@@ -510,8 +514,199 @@ class IptvService {
     }
   }
 
-  // Diğer IPTV işlemleri için metodlar buraya eklenecek
-  // - Kanal listesi alma
-  // - Yayın akışı URL'i alma
-  // - EPG (Program rehberi) alma vb.
+  // Tüm arama geçmişini temizle
+  Future<void> clearSearchHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_searchHistoryKey);
+  }
+
+  // Arama yap
+  Future<SearchResults> search(String query, {
+    bool includeChannels = true,
+    bool includeMovies = true,
+    bool includeSeries = true,
+    String sortOrder = 'asc', // 'asc' veya 'desc'
+  }) async {
+    if (_serverUrl == null || _username == null || _password == null) {
+      throw Exception('IptvService not initialized');
+    }
+
+    if (query.trim().isEmpty) {
+      return SearchResults(channels: [], movies: [], series: []);
+    }
+
+    final normalizedQuery = query.toLowerCase().trim();
+    
+    List<Map<String, dynamic>> channelResults = [];
+    List<Map<String, dynamic>> movieResults = [];
+    List<Map<String, dynamic>> seriesResults = [];
+
+    try {
+      // Kanalları ara
+      if (includeChannels) {
+        final allChannels = await getLiveTV();
+        channelResults = allChannels.where((channel) {
+          final name = (channel['name'] ?? '').toLowerCase();
+          final description = (channel['description'] ?? '').toLowerCase();
+          return name.contains(normalizedQuery) || description.contains(normalizedQuery);
+        }).toList();
+      }
+
+      // Filmleri ara
+      if (includeMovies) {
+        final allMovies = await getMovies();
+        movieResults = allMovies.where((movie) {
+          final name = (movie['name'] ?? '').toLowerCase();
+          final description = (movie['description'] ?? '').toLowerCase();
+          final plot = (movie['plot'] ?? '').toLowerCase();
+          final cast = (movie['cast'] ?? '').toLowerCase();
+          final director = (movie['director'] ?? '').toLowerCase();
+          final genre = (movie['genre'] ?? '').toLowerCase();
+          
+          return name.contains(normalizedQuery) || 
+                 description.contains(normalizedQuery) || 
+                 plot.contains(normalizedQuery) ||
+                 cast.contains(normalizedQuery) ||
+                 director.contains(normalizedQuery) ||
+                 genre.contains(normalizedQuery);
+        }).toList();
+      }
+
+      // Dizileri ara
+      if (includeSeries) {
+        final allSeries = await getSeries();
+        seriesResults = allSeries.where((series) {
+          final name = (series['name'] ?? '').toLowerCase();
+          final description = (series['description'] ?? '').toLowerCase();
+          final plot = (series['plot'] ?? '').toLowerCase();
+          final cast = (series['cast'] ?? '').toLowerCase();
+          final director = (series['director'] ?? '').toLowerCase();
+          final genre = (series['genre'] ?? '').toLowerCase();
+          
+          return name.contains(normalizedQuery) || 
+                 description.contains(normalizedQuery) || 
+                 plot.contains(normalizedQuery) ||
+                 cast.contains(normalizedQuery) ||
+                 director.contains(normalizedQuery) ||
+                 genre.contains(normalizedQuery);
+        }).toList();
+      }
+
+      // Sonuçları sırala
+      final sortFunction = (Map<String, dynamic> a, Map<String, dynamic> b) {
+        final nameA = (a['name'] ?? '').toLowerCase();
+        final nameB = (b['name'] ?? '').toLowerCase();
+        return sortOrder == 'asc' 
+            ? nameA.compareTo(nameB) 
+            : nameB.compareTo(nameA);
+      };
+
+      channelResults.sort((a, b) => sortFunction(a, b));
+      movieResults.sort((a, b) => sortFunction(a, b));
+      seriesResults.sort((a, b) => sortFunction(a, b));
+
+      return SearchResults(
+        channels: channelResults,
+        movies: movieResults,
+        series: seriesResults,
+      );
+    } catch (e) {
+      print('Search error: $e');
+      return SearchResults(channels: [], movies: [], series: []);
+    }
+  }
+
+  // Tarih sıralaması için yardımcı metod
+  List<Map<String, dynamic>> _sortByDate(List<Map<String, dynamic>> items, bool ascending) {
+    items.sort((a, b) {
+      // Önce tarih alanını bul (added, releaseDate, last_modified vb.)
+      String? dateFieldA;
+      String? dateFieldB;
+      
+      if (a.containsKey('added')) {
+        dateFieldA = a['added'];
+        dateFieldB = b['added'];
+      } else if (a.containsKey('releaseDate')) {
+        dateFieldA = a['releaseDate'];
+        dateFieldB = b['releaseDate'];
+      } else if (a.containsKey('last_modified')) {
+        dateFieldA = a['last_modified'];
+        dateFieldB = b['last_modified'];
+      } else {
+        // Tarih alanı bulunamadı, isme göre sırala
+        final nameA = (a['name'] ?? '').toLowerCase();
+        final nameB = (b['name'] ?? '').toLowerCase();
+        return ascending ? nameA.compareTo(nameB) : nameB.compareTo(nameA);
+      }
+      
+      // Tarih alanları null ise isme göre sırala
+      if (dateFieldA == null || dateFieldB == null) {
+        final nameA = (a['name'] ?? '').toLowerCase();
+        final nameB = (b['name'] ?? '').toLowerCase();
+        return ascending ? nameA.compareTo(nameB) : nameB.compareTo(nameA);
+      }
+      
+      // Tarihleri karşılaştır
+      try {
+        final dateA = DateTime.parse(dateFieldA);
+        final dateB = DateTime.parse(dateFieldB);
+        return ascending ? dateA.compareTo(dateB) : dateB.compareTo(dateA);
+      } catch (e) {
+        // Tarih ayrıştırılamadı, isme göre sırala
+        final nameA = (a['name'] ?? '').toLowerCase();
+        final nameB = (b['name'] ?? '').toLowerCase();
+        return ascending ? nameA.compareTo(nameB) : nameB.compareTo(nameA);
+      }
+    });
+    
+    return items;
+  }
+  
+  // Sonuçları tarihe göre sırala
+  Future<SearchResults> sortResultsByDate(SearchResults results, bool ascending) async {
+    return SearchResults(
+      channels: _sortByDate(results.channels, ascending),
+      movies: _sortByDate(results.movies, ascending),
+      series: _sortByDate(results.series, ascending),
+    );
+  }
+
+  // Sonuçları isme göre sırala
+  Future<SearchResults> sortResultsByName(SearchResults results, bool ascending) async {
+    final sortFunction = (Map<String, dynamic> a, Map<String, dynamic> b) {
+      final nameA = (a['name'] ?? '').toLowerCase();
+      final nameB = (b['name'] ?? '').toLowerCase();
+      return ascending ? nameA.compareTo(nameB) : nameB.compareTo(nameA);
+    };
+
+    final channels = List<Map<String, dynamic>>.from(results.channels);
+    final movies = List<Map<String, dynamic>>.from(results.movies);
+    final series = List<Map<String, dynamic>>.from(results.series);
+
+    channels.sort((a, b) => sortFunction(a, b));
+    movies.sort((a, b) => sortFunction(a, b));
+    series.sort((a, b) => sortFunction(a, b));
+
+    return SearchResults(
+      channels: channels,
+      movies: movies,
+      series: series,
+    );
+  }
+}
+
+// Arama sonuçları için model sınıfı
+class SearchResults {
+  final List<Map<String, dynamic>> channels;
+  final List<Map<String, dynamic>> movies;
+  final List<Map<String, dynamic>> series;
+
+  SearchResults({
+    required this.channels,
+    required this.movies,
+    required this.series,
+  });
+
+  bool get isEmpty => channels.isEmpty && movies.isEmpty && series.isEmpty;
+  int get totalCount => channels.length + movies.length + series.length;
 } 
