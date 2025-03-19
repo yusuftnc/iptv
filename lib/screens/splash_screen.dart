@@ -49,7 +49,7 @@ class _SplashScreenState extends State<SplashScreen> {
             transitionsBuilder: (context, animation, secondaryAnimation, child) {
               return FadeTransition(opacity: animation, child: child);
             },
-            transitionDuration: const Duration(milliseconds: 150),
+            transitionDuration: const Duration(milliseconds: 100),
           ),
         );
       } else if (mounted) {
@@ -61,7 +61,7 @@ class _SplashScreenState extends State<SplashScreen> {
             transitionsBuilder: (context, animation, secondaryAnimation, child) {
               return FadeTransition(opacity: animation, child: child);
             },
-            transitionDuration: const Duration(milliseconds: 150),
+            transitionDuration: const Duration(milliseconds: 100),
           ),
         );
       }
@@ -74,7 +74,7 @@ class _SplashScreenState extends State<SplashScreen> {
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
           },
-          transitionDuration: const Duration(milliseconds: 150),
+          transitionDuration: const Duration(milliseconds: 100),
         ),
       );
     }

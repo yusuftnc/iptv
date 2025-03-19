@@ -85,7 +85,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 transitionsBuilder: (context, animation, secondaryAnimation, child) {
                   return FadeTransition(opacity: animation, child: child);
                 },
-                transitionDuration: const Duration(milliseconds: 150),
+                transitionDuration: const Duration(milliseconds: 100),
               ),
             );
           }

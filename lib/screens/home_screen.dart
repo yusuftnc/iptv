@@ -8,6 +8,8 @@ import 'login_screen.dart';
 import 'player_screen.dart';
 import 'series_detail_screen.dart';
 import 'search_screen.dart';
+import 'favorites_screen.dart';
+import 'watch_history_screen.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -158,14 +160,8 @@ class _HomeScreenState extends State<HomeScreen> {
         backgroundColor: Colors.black,
         appBar: AppBar(
           title: Text(_selectedCategoryName.isNotEmpty 
-              ? _selectedCategoryName 
-              : _currentIndex == 0 
-                  ? 'Yeniler' 
-                  : _currentIndex == 1 
-                      ? 'TV Kanalları' 
-                      : _currentIndex == 2 
-                          ? 'Filmler' 
-                          : 'Diziler'),
+            ? _selectedCategoryName 
+            : _getAppBarTitle()),
           backgroundColor: Colors.blue,
           leading: _selectedCategoryName.isNotEmpty 
               ? IconButton(
@@ -190,11 +186,27 @@ class _HomeScreenState extends State<HomeScreen> {
                     transitionsBuilder: (context, animation, secondaryAnimation, child) {
                       return FadeTransition(opacity: animation, child: child);
                     },
-                    transitionDuration: const Duration(milliseconds: 150), // Daha kısa süre
+                    transitionDuration: const Duration(milliseconds: 100),
                   ),
                 );
               },
               tooltip: 'Ara',
+            ),
+            IconButton(
+              icon: const Icon(Icons.favorite),
+              onPressed: () {
+                Navigator.push(
+                  context,
+                  PageRouteBuilder(
+                    pageBuilder: (context, animation, secondaryAnimation) => const FavoritesScreen(),
+                    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                      return FadeTransition(opacity: animation, child: child);
+                    },
+                    transitionDuration: const Duration(milliseconds: 100),
+                  ),
+                );
+              },
+              tooltip: 'Favoriler',
             ),
             IconButton(
               icon: const Icon(Icons.refresh),
@@ -207,6 +219,107 @@ class _HomeScreenState extends State<HomeScreen> {
               tooltip: 'Çıkış Yap',
             ),
           ],
+        ),
+        drawer: Drawer(
+          child: Container(
+            color: Colors.grey.shade900,
+            child: ListView(
+              padding: EdgeInsets.zero,
+              children: [
+                DrawerHeader(
+                  decoration: const BoxDecoration(
+                    color: Colors.blue,
+                  ),
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      const Text(
+                        'IPTV',
+                        style: TextStyle(
+                          color: Colors.white,
+                          fontSize: 24,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      Text(
+                        'Kullanıcı: ${_iptvService.getUsername() ?? ''}',
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 16,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                ListTile(
+                  title: const Text(
+                    'Anasayfa',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  leading: const Icon(
+                    Icons.home,
+                    color: Colors.white,
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                  },
+                ),
+                ListTile(
+                  title: const Text(
+                    'Favoriler',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  leading: const Icon(
+                    Icons.favorite,
+                    color: Colors.white,
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const FavoritesScreen(),
+                      ),
+                    );
+                  },
+                ),
+                ListTile(
+                  title: const Text(
+                    'İzleme Geçmişi',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  leading: const Icon(
+                    Icons.history,
+                    color: Colors.white,
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const WatchHistoryScreen(),
+                      ),
+                    );
+                  },
+                ),
+                const Divider(color: Colors.grey),
+                ListTile(
+                  title: const Text(
+                    'Çıkış Yap',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  leading: const Icon(
+                    Icons.logout,
+                    color: Colors.white,
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _logout();
+                  },
+                ),
+              ],
+            ),
+          ),
         ),
         body: _buildBody(),
         bottomNavigationBar: BottomNavigationBar(
@@ -333,40 +446,29 @@ class _HomeScreenState extends State<HomeScreen> {
       );
     }
 
+    // Performans optimizasyonu için sabit değerler
+    const separatorHeight = 1.0;
+    const separatorIndent = 70.0;
+    const arrowSize = 16.0;
+    
     return ListView.separated(
+      cacheExtent: 120.0, // Daha fazla öğeyi önbelleğe al
       itemCount: categories.length,
       separatorBuilder: (context, index) => const Divider(
         color: Colors.grey,
-        height: 1,
-        indent: 70,
+        height: separatorHeight,
+        indent: separatorIndent,
       ),
       itemBuilder: (context, index) {
         final category = categories[index];
-        return ListTile(
-          title: Text(
+        return CategoryListItem(
+          category: category,
+          contentType: contentType,
+          onTap: () => _loadCategoryContent(
+            category['category_id'].toString(),
             category['category_name'] ?? 'İsimsiz Kategori',
-            style: const TextStyle(color: Colors.white),
+            contentType,
           ),
-          leading: Icon(
-            contentType == 'live' 
-                ? Icons.tv 
-                : contentType == 'movie' 
-                    ? Icons.movie 
-                    : Icons.video_library,
-            color: Colors.blue,
-          ),
-          trailing: const Icon(
-            Icons.arrow_forward_ios,
-            color: Colors.blue,
-            size: 16,
-          ),
-          onTap: () {
-            _loadCategoryContent(
-              category['category_id'].toString(),
-              category['category_name'] ?? 'İsimsiz Kategori',
-              contentType,
-            );
-          },
         );
       },
     );
@@ -471,7 +573,7 @@ class _HomeScreenState extends State<HomeScreen> {
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
           },
-          transitionDuration: const Duration(milliseconds: 150),
+          transitionDuration: const Duration(milliseconds: 100),
         ),
       );
     } else {
@@ -483,7 +585,7 @@ class _HomeScreenState extends State<HomeScreen> {
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
           },
-          transitionDuration: const Duration(milliseconds: 150),
+          transitionDuration: const Duration(milliseconds: 100),
         ),
       );
     }
@@ -535,6 +637,68 @@ class _HomeScreenState extends State<HomeScreen> {
           ),
         ],
       ),
+    );
+  }
+
+  String _getAppBarTitle() {
+    switch (_currentIndex) {
+      case 0:
+        return 'Yeniler';
+      case 1:
+        return 'TV Kanalları';
+      case 2:
+        return 'Filmler';
+      case 3:
+        return 'Diziler';
+      default:
+        return 'Bilinmeyen sekme';
+    }
+  }
+}
+
+// Kategori listesi öğeleri için özel widget
+class CategoryListItem extends StatelessWidget {
+  final Map<String, dynamic> category;
+  final String contentType;
+  final VoidCallback onTap;
+
+  const CategoryListItem({
+    Key? key,
+    required this.category,
+    required this.contentType,
+    required this.onTap,
+  }) : super(key: key);
+
+  @override
+  Widget build(BuildContext context) {
+    // Sabit değerler
+    const iconColor = Colors.blue;
+    const textColor = Colors.white;
+    const arrowColor = Colors.blue;
+    const arrowSize = 16.0;
+    
+    // İçerik tipine göre ikon belirleme
+    final IconData categoryIcon = contentType == 'live' 
+        ? Icons.tv 
+        : contentType == 'movie' 
+            ? Icons.movie 
+            : Icons.video_library;
+    
+    return ListTile(
+      title: Text(
+        category['category_name'] ?? 'İsimsiz Kategori',
+        style: const TextStyle(color: textColor),
+      ),
+      leading: Icon(
+        categoryIcon,
+        color: iconColor,
+      ),
+      trailing: const Icon(
+        Icons.arrow_forward_ios,
+        color: arrowColor,
+        size: arrowSize,
+      ),
+      onTap: onTap,
     );
   }
 } 

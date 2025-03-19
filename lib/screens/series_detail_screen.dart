@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/content_item.dart';
 import '../services/iptv_service.dart';
+import '../services/database_service.dart';
 import 'player_screen.dart';
 
 class SeriesDetailScreen extends StatefulWidget {
@@ -18,8 +19,10 @@ class SeriesDetailScreen extends StatefulWidget {
 
 class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   final IptvService _iptvService = IptvService();
+  final DatabaseService _databaseService = DatabaseService();
   bool _isLoading = true;
   String _errorMessage = '';
+  bool _isFavorite = false;
   
   // Dizi bilgileri
   Map<String, dynamic> _seriesInfo = {};
@@ -31,6 +34,28 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   void initState() {
     super.initState();
     _loadSeriesDetails();
+    _checkIfFavorite();
+  }
+  
+  Future<void> _checkIfFavorite() async {
+    final isFavorite = await _databaseService.isFavorite(widget.seriesItem.id);
+    if (mounted) {
+      setState(() {
+        _isFavorite = isFavorite;
+      });
+    }
+  }
+
+  Future<void> _toggleFavorite() async {
+    if (_isFavorite) {
+      await _databaseService.removeFavorite(widget.seriesItem.id);
+    } else {
+      await _databaseService.addFavorite(widget.seriesItem);
+    }
+    
+    setState(() {
+      _isFavorite = !_isFavorite;
+    });
   }
   
   Future<void> _loadSeriesDetails() async {
@@ -88,7 +113,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(opacity: animation, child: child);
         },
-        transitionDuration: const Duration(milliseconds: 150),
+        transitionDuration: const Duration(milliseconds: 100),
       ),
     );
   }
@@ -100,6 +125,16 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       appBar: AppBar(
         title: Text(widget.seriesItem.name),
         backgroundColor: Colors.blue,
+        actions: [
+          IconButton(
+            icon: Icon(
+              _isFavorite ? Icons.favorite : Icons.favorite_border,
+              color: _isFavorite ? Colors.red : Colors.white,
+            ),
+            onPressed: _toggleFavorite,
+            tooltip: _isFavorite ? 'Favorilerden Çıkar' : 'Favorilere Ekle',
+          ),
+        ],
       ),
       body: _buildBody(),
     );
@@ -349,6 +384,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     
     return ListView.separated(
       padding: const EdgeInsets.all(16),
+      cacheExtent: 100.0,
       itemCount: episodes.length,
       separatorBuilder: (context, index) => const SizedBox(height: 8),
       itemBuilder: (context, index) {

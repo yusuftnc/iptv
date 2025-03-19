@@ -120,7 +120,7 @@ class _SearchScreenState extends State<SearchScreen> {
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
           },
-          transitionDuration: const Duration(milliseconds: 150),
+          transitionDuration: const Duration(milliseconds: 100),
         ),
       );
     } else {
@@ -131,7 +131,7 @@ class _SearchScreenState extends State<SearchScreen> {
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
           },
-          transitionDuration: const Duration(milliseconds: 150),
+          transitionDuration: const Duration(milliseconds: 100),
         ),
       );
     }
@@ -427,6 +427,7 @@ class _SearchScreenState extends State<SearchScreen> {
         ),
         Expanded(
           child: ListView.separated(
+            cacheExtent: 100.0,
             itemCount: _searchHistory.length,
             separatorBuilder: (context, index) => const Divider(
               color: Colors.grey,
@@ -539,6 +540,7 @@ class _SearchScreenState extends State<SearchScreen> {
     return ListView.separated(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
+      cacheExtent: 100.0,
       itemCount: channels.length,
       separatorBuilder: (context, index) => const Divider(
         color: Colors.grey,
