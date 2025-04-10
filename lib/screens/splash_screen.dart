@@ -25,10 +25,11 @@ class _SplashScreenState extends State<SplashScreen> {
     
     final storageService = StorageService();
     final hasCredentials = await storageService.hasCredentials();
-    
+
     if (hasCredentials) {
       // Kayıtlı giriş bilgileri var, otomatik giriş yap
       final credentials = await storageService.getCredentials();
+      
       final iptvService = IptvService();
       
       await iptvService.initialize(

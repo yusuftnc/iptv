@@ -408,11 +408,11 @@ class _HomeScreenState extends State<HomeScreen> {
       case 0: // Yeniler
         return _buildNewContent();
       case 1: // TV Kanalları
-        return _buildCategoryList(_liveCategories, 'live');
+        return _buildCategoryList(_liveCategories);
       case 2: // Filmler
-        return _buildCategoryList(_movieCategories, 'movie');
+        return _buildCategoryList(_movieCategories);
       case 3: // Diziler
-        return _buildCategoryList(_seriesCategories, 'series');
+        return _buildCategoryList(_seriesCategories);
       default:
         return const Center(
           child: Text(
@@ -432,42 +432,26 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildCategoryList(List<Map<String, dynamic>> categories, String contentType) {
-    if (categories.isEmpty) {
-      return Center(
-        child: Text(
-          contentType == 'live' 
-              ? 'Hiç TV kanalı kategorisi bulunamadı' 
-              : contentType == 'movie' 
-                  ? 'Hiç film kategorisi bulunamadı' 
-                  : 'Hiç dizi kategorisi bulunamadı',
-          style: const TextStyle(color: Colors.white),
-        ),
-      );
-    }
-
-    // Performans optimizasyonu için sabit değerler
-    const separatorHeight = 1.0;
-    const separatorIndent = 70.0;
-    const arrowSize = 16.0;
-    
+  Widget _buildCategoryList(List<Map<String, dynamic>> categories) {
     return ListView.separated(
-      cacheExtent: 120.0, // Daha fazla öğeyi önbelleğe al
+      padding: const EdgeInsets.symmetric(vertical: 8),
       itemCount: categories.length,
-      separatorBuilder: (context, index) => const Divider(
-        color: Colors.grey,
-        height: separatorHeight,
-        indent: separatorIndent,
-      ),
+      separatorBuilder: (context, index) => const Divider(height: 1),
       itemBuilder: (context, index) {
         final category = categories[index];
-        return CategoryListItem(
-          category: category,
-          contentType: contentType,
+        return ListTile(
+          leading: Icon(
+            _getCategoryIcon(category['category_name']),
+            color: Colors.white,
+          ),
+          title: Text(
+            category['category_name'],
+            style: const TextStyle(color: Colors.white),
+          ),
           onTap: () => _loadCategoryContent(
             category['category_id'].toString(),
             category['category_name'] ?? 'İsimsiz Kategori',
-            contentType,
+            _currentContentType,
           ),
         );
       },
@@ -500,6 +484,10 @@ class _HomeScreenState extends State<HomeScreen> {
         mainAxisSpacing: mainAxisSpacing,
       ),
       itemCount: _selectedCategoryContent.length,
+      // Scroll performansı için cacheExtent ekliyoruz
+      cacheExtent: 1000,
+      // Scroll sırasında gereksiz yeniden oluşturmaları engellemek için
+      addAutomaticKeepAlives: true,
       itemBuilder: (context, index) {
         final item = _selectedCategoryContent[index];
         final contentItem = ContentItem.fromJson(item, _currentContentType);
@@ -511,51 +499,66 @@ class _HomeScreenState extends State<HomeScreen> {
                 ? const Icon(Icons.movie, size: 30, color: Colors.white)
                 : const Icon(Icons.video_library, size: 30, color: Colors.white);
         
-        return Card(
-          clipBehavior: Clip.antiAlias,
-          child: InkWell(
-            onTap: () {
-              _playContent(contentItem);
-            },
-            child: Stack(
-              fit: StackFit.expand,
-              children: [
-                if (contentItem.streamIcon != null && contentItem.streamIcon!.isNotEmpty)
-                  CachedNetworkImage(
-                    imageUrl: contentItem.streamIcon!,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => const Center(
-                      child: CircularProgressIndicator(),
-                    ),
-                    errorWidget: (context, url, error) => Container(
+        return RepaintBoundary(
+          child: Card(
+            clipBehavior: Clip.antiAlias,
+            child: InkWell(
+              onTap: () {
+                _playContent(contentItem);
+              },
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  if (contentItem.streamIcon != null && contentItem.streamIcon!.isNotEmpty)
+                    CachedNetworkImage(
+                      imageUrl: contentItem.streamIcon!,
+                      fit: BoxFit.cover,
+                      // Önbellek boyutunu optimize ediyoruz
+                      memCacheWidth: 300,
+                      memCacheHeight: 450,
+                      // Disk önbelleğini aktif ediyoruz
+                      cacheKey: contentItem.streamIcon,
+                      // Önbellek süresini uzatıyoruz
+                      maxHeightDiskCache: 450,
+                      maxWidthDiskCache: 300,
+                      placeholder: (context, url) => Container(
+                        color: Colors.grey[800],
+                        child: const Center(
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                          ),
+                        ),
+                      ),
+                      errorWidget: (context, url, error) => Container(
+                        color: Colors.grey[800],
+                        child: iconWidget,
+                      ),
+                    )
+                  else
+                    Container(
                       color: Colors.grey[800],
                       child: iconWidget,
                     ),
-                  )
-                else
-                  Container(
-                    color: Colors.grey[800],
-                    child: iconWidget,
-                  ),
-                Positioned(
-                  bottom: 0,
-                  left: 0,
-                  right: 0,
-                  child: Container(
-                    padding: const EdgeInsets.all(4),
-                    color: Colors.black54,
-                    child: Text(
-                      contentItem.name,
-                      style: const TextStyle(
-                        color: Colors.white,
-                        fontSize: 12,
+                  Positioned(
+                    bottom: 0,
+                    left: 0,
+                    right: 0,
+                    child: Container(
+                      padding: const EdgeInsets.all(4),
+                      color: Colors.black54,
+                      child: Text(
+                        contentItem.name,
+                        style: const TextStyle(
+                          color: Colors.white,
+                          fontSize: 12,
+                        ),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                       ),
-                      maxLines: 2,
-                      overflow: TextOverflow.ellipsis,
                     ),
                   ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         );
@@ -653,6 +656,95 @@ class _HomeScreenState extends State<HomeScreen> {
       default:
         return 'Bilinmeyen sekme';
     }
+  }
+
+  IconData _getCategoryIcon(String categoryName) {
+    final name = categoryName.toLowerCase();
+    if (name.contains('film') || name.contains('movie')) {
+      return Icons.movie;
+    } else if (name.contains('dizi') || name.contains('series')) {
+      return Icons.video_library;
+    } else if (name.contains('spor') || name.contains('sport')) {
+      return Icons.sports;
+    } else if (name.contains('çocuk') || name.contains('kids')) {
+      return Icons.child_care;
+    } else if (name.contains('belgesel') || name.contains('documentary')) {
+      return Icons.nature;
+    } else {
+      return Icons.tv;
+    }
+  }
+
+  Widget _buildContentList(List<Map<String, dynamic>> items) {
+    return ListView.builder(
+      padding: const EdgeInsets.symmetric(vertical: 8),
+      itemCount: items.length,
+      // Scroll performansı için cacheExtent ekliyoruz
+      cacheExtent: 500,
+      // Scroll sırasında gereksiz yeniden oluşturmaları engellemek için
+      addAutomaticKeepAlives: true,
+      itemBuilder: (context, index) {
+        final item = items[index];
+        return RepaintBoundary(
+          child: ListTile(
+            leading: ClipRRect(
+              borderRadius: BorderRadius.circular(4),
+              child: item['stream_icon'] != null && item['stream_icon'].isNotEmpty
+                  ? CachedNetworkImage(
+                      imageUrl: item['stream_icon'],
+                      width: 40,
+                      height: 40,
+                      fit: BoxFit.cover,
+                      memCacheWidth: 80, // Önbellek boyutunu optimize ediyoruz
+                      memCacheHeight: 80,
+                      placeholder: (context, url) => const SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: Center(
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                          ),
+                        ),
+                      ),
+                      errorWidget: (context, url, error) => const SizedBox(
+                        width: 40,
+                        height: 40,
+                        child: Icon(
+                          Icons.error_outline,
+                          color: Colors.red,
+                          size: 24,
+                        ),
+                      ),
+                    )
+                  : const SizedBox(
+                      width: 40,
+                      height: 40,
+                      child: Icon(
+                        Icons.video_library,
+                        color: Colors.white,
+                        size: 24,
+                      ),
+                    ),
+            ),
+            title: Text(
+              item['name'] ?? 'İsimsiz İçerik',
+              style: const TextStyle(color: Colors.white),
+              maxLines: 1,
+              overflow: TextOverflow.ellipsis,
+            ),
+            subtitle: item['description'] != null && item['description'].isNotEmpty
+                ? Text(
+                    item['description'],
+                    style: const TextStyle(color: Colors.grey),
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                  )
+                : null,
+            onTap: () => _playContent(ContentItem.fromJson(item, _currentContentType)),
+          ),
+        );
+      },
+    );
   }
 }
 
