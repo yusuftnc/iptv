@@ -484,20 +484,11 @@ class _HomeScreenState extends State<HomeScreen> {
         mainAxisSpacing: mainAxisSpacing,
       ),
       itemCount: _selectedCategoryContent.length,
-      // Scroll performansı için cacheExtent ekliyoruz
       cacheExtent: 1000,
-      // Scroll sırasında gereksiz yeniden oluşturmaları engellemek için
       addAutomaticKeepAlives: true,
       itemBuilder: (context, index) {
         final item = _selectedCategoryContent[index];
         final contentItem = ContentItem.fromJson(item, _currentContentType);
-        
-        // İkon widget'ını önceden oluştur
-        final iconWidget = _currentContentType == 'live'
-            ? const Icon(Icons.tv, size: 30, color: Colors.white)
-            : _currentContentType == 'movie'
-                ? const Icon(Icons.movie, size: 30, color: Colors.white)
-                : const Icon(Icons.video_library, size: 30, color: Colors.white);
         
         return RepaintBoundary(
           child: Card(
@@ -512,32 +503,40 @@ class _HomeScreenState extends State<HomeScreen> {
                   if (contentItem.streamIcon != null && contentItem.streamIcon!.isNotEmpty)
                     CachedNetworkImage(
                       imageUrl: contentItem.streamIcon!,
-                      fit: BoxFit.cover,
-                      // Önbellek boyutunu optimize ediyoruz
+                      fit: _currentContentType == 'live' ? BoxFit.contain : BoxFit.cover,
+                      width: double.infinity,
+                      height: double.infinity,
+                      alignment: _currentContentType == 'live' ? Alignment.center : Alignment.topCenter,
                       memCacheWidth: 300,
                       memCacheHeight: 450,
-                      // Disk önbelleğini aktif ediyoruz
                       cacheKey: contentItem.streamIcon,
-                      // Önbellek süresini uzatıyoruz
                       maxHeightDiskCache: 450,
                       maxWidthDiskCache: 300,
                       placeholder: (context, url) => Container(
-                        color: Colors.grey[800],
-                        child: const Center(
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                          ),
-                        ),
+                        color: Colors.grey[900],
+                        child: const Center(child: CircularProgressIndicator()),
                       ),
                       errorWidget: (context, url, error) => Container(
-                        color: Colors.grey[800],
-                        child: iconWidget,
+                        color: Colors.grey[900],
+                        child: Icon(
+                          _currentContentType == 'live' ? Icons.tv
+                          : _currentContentType == 'movie' ? Icons.movie
+                          : Icons.video_library,
+                          size: 30,
+                          color: Colors.white,
+                        ),
                       ),
                     )
                   else
                     Container(
-                      color: Colors.grey[800],
-                      child: iconWidget,
+                      color: Colors.grey[900],
+                      child: Icon(
+                        _currentContentType == 'live' ? Icons.tv
+                        : _currentContentType == 'movie' ? Icons.movie
+                        : Icons.video_library,
+                        size: 30,
+                        color: Colors.white,
+                      ),
                     ),
                   Positioned(
                     bottom: 0,
