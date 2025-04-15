@@ -109,32 +109,17 @@ class _SearchScreenState extends State<SearchScreen> {
     await _loadSearchHistory();
   }
   
-  void _playContent(Map<String, dynamic> item, String contentType) {
-    final contentItem = ContentItem.fromJson(item, contentType);
-    
-    if (contentType == 'series') {
-      Navigator.push(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => SeriesDetailScreen(seriesItem: contentItem),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-          transitionDuration: const Duration(milliseconds: 100),
+  void _playContent(ContentItem contentItem) {
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PlayerScreen(
+          contentId: contentItem.id,
+          streamUrl: contentItem.streamUrl ?? '',
+          contentType: contentItem.streamType ?? 'movie',
         ),
-      );
-    } else {
-      Navigator.push(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => PlayerScreen(contentItem: contentItem),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-          transitionDuration: const Duration(milliseconds: 100),
-        ),
-      );
-    }
+      ),
+    );
   }
   
   void _updateSort(String sortType, bool ascending) {
@@ -585,7 +570,7 @@ class _SearchScreenState extends State<SearchScreen> {
                   style: TextStyle(color: Colors.grey[400]),
                 )
               : null,
-          onTap: () => _playContent(channel, 'live'),
+          onTap: () => _playContent(ContentItem.fromJson(channel, 'live')),
         );
       },
     );
@@ -626,7 +611,7 @@ class _SearchScreenState extends State<SearchScreen> {
           clipBehavior: Clip.antiAlias,
           color: Colors.grey[900],
           child: InkWell(
-            onTap: () => _playContent(item, contentType),
+            onTap: () => _playContent(ContentItem.fromJson(item, contentType)),
             child: Stack(
               fit: StackFit.expand,
               children: [

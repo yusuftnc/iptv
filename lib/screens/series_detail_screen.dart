@@ -109,7 +109,11 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     Navigator.push(
       context,
       PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => PlayerScreen(contentItem: episodeItem),
+        pageBuilder: (context, animation, secondaryAnimation) => PlayerScreen(
+          contentId: episodeItem.id,
+          streamUrl: episodeItem.streamUrl ?? '',
+          contentType: 'series',
+        ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(opacity: animation, child: child);
         },

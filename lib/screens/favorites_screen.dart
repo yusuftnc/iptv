@@ -55,33 +55,26 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     final contentItem = ContentItem(
       id: item.id,
       name: item.name,
-      streamType: item.streamType,
-      streamIcon: item.streamIcon,
       streamUrl: item.streamUrl,
-      description: item.description,
-      category: item.category,
+      streamType: item.streamType,
     );
 
     if (item.streamType == 'series') {
       Navigator.push(
         context,
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => SeriesDetailScreen(seriesItem: contentItem),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-          transitionDuration: const Duration(milliseconds: 100),
+        MaterialPageRoute(
+          builder: (context) => SeriesDetailScreen(seriesItem: contentItem),
         ),
       );
     } else {
       Navigator.push(
         context,
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => PlayerScreen(contentItem: contentItem),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-          transitionDuration: const Duration(milliseconds: 100),
+        MaterialPageRoute(
+          builder: (context) => PlayerScreen(
+            contentId: contentItem.id,
+            streamUrl: contentItem.streamUrl ?? '',
+            contentType: contentItem.streamType ?? 'movie',
+          ),
         ),
       );
     }

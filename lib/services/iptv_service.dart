@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
+import '../models/movie_details.dart';
 
 class IptvService {
   String? _host;
@@ -244,23 +245,32 @@ class IptvService {
   }
 
   Future<List<Map<String, dynamic>>> getChannels(String categoryId) async {
-    if (_serverUrl == null || _username == null || _password == null) {
-      throw Exception('IptvService not initialized');
-    }
-
     try {
-      final response = await http.get(
-        Uri.parse('$_serverUrl/player_api.php?username=$_username&password=$_password&action=get_live_streams&category_id=$categoryId'),
-        headers: {'Content-Type': 'application/json'},
-      ).timeout(const Duration(seconds: 10));
+      print('Debug - Getting channels for category: $categoryId');
+      final uri = Uri.parse('$_serverUrl/player_api.php').replace(
+        queryParameters: {
+          'username': _username,
+          'password': _password,
+          'action': 'get_live_streams',
+          'category_id': categoryId,
+        },
+      );
+
+      print('Debug - Request URL: ${uri.toString()}');
+      final response = await http.get(uri).timeout(const Duration(seconds: 30));
+      print('Debug - Response status: ${response.statusCode}');
+      print('Debug - Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        return data.map((item) => item as Map<String, dynamic>).toList();
+        if (data is List) {
+          return data.map((item) => Map<String, dynamic>.from(item)).toList();
+        }
       }
-      throw Exception('Failed to load channels: ${response.statusCode}');
+      return [];
     } catch (e) {
-      throw Exception('Failed to load channels: $e');
+      print('Debug - Get Live TV error: $e');
+      return [];
     }
   }
 
@@ -281,7 +291,7 @@ class IptvService {
       try {
         final response = await http.head(Uri.parse(url))
             .timeout(const Duration(seconds: 3));
-        if (response.statusCode == 200) {
+      if (response.statusCode == 200) {
           print('Debug - Önbellekteki format çalışıyor: $url');
           return url; // Önbellekteki format çalışıyor
         }
@@ -318,7 +328,7 @@ class IptvService {
         final response = await http.head(Uri.parse(url))
             .timeout(const Duration(seconds: 3));
         
-        if (response.statusCode == 200) {
+      if (response.statusCode == 200) {
           // Çalışan formatı önbelleğe al
           _formatCache[streamType] = template;
           print('Debug - Çalışan format bulundu ve önbelleğe alındı: $url');
@@ -375,6 +385,7 @@ class IptvService {
   // Filmleri getir
   Future<List<Map<String, dynamic>>> getMovies() async {
     try {
+      print('Debug - Getting all movies');
       final uri = Uri.parse('$_serverUrl/player_api.php').replace(
         queryParameters: {
           'username': _username,
@@ -383,15 +394,20 @@ class IptvService {
         },
       );
 
+      print('Debug - Request URL: ${uri.toString()}');
       final response = await http.get(uri).timeout(const Duration(seconds: 30));
+      print('Debug - Response status: ${response.statusCode}');
+      print('Debug - Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        return List<Map<String, dynamic>>.from(data);
+        if (data is List) {
+          return data.map((item) => Map<String, dynamic>.from(item)).toList();
+        }
       }
       return [];
     } catch (e) {
-      print('Get Movies error: $e');
+      print('Debug - Get Movies error: $e');
       return [];
     }
   }
@@ -399,6 +415,7 @@ class IptvService {
   // Dizileri getir
   Future<List<Map<String, dynamic>>> getSeries() async {
     try {
+      print('Debug - Getting all series');
       final uri = Uri.parse('$_serverUrl/player_api.php').replace(
         queryParameters: {
           'username': _username,
@@ -407,15 +424,20 @@ class IptvService {
         },
       );
 
+      print('Debug - Request URL: ${uri.toString()}');
       final response = await http.get(uri).timeout(const Duration(seconds: 30));
+      print('Debug - Response status: ${response.statusCode}');
+      print('Debug - Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        return List<Map<String, dynamic>>.from(data);
+        if (data is List) {
+          return data.map((item) => Map<String, dynamic>.from(item)).toList();
+        }
       }
       return [];
     } catch (e) {
-      print('Get Series error: $e');
+      print('Debug - Get Series error: $e');
       return [];
     }
   }
@@ -423,6 +445,7 @@ class IptvService {
   // Dizi detaylarını getir
   Future<Map<String, dynamic>> getSeriesInfo(String seriesId) async {
     try {
+      print('Debug - Getting series info for ID: $seriesId');
       final uri = Uri.parse('$_serverUrl/player_api.php').replace(
         queryParameters: {
           'username': _username,
@@ -432,11 +455,29 @@ class IptvService {
         },
       );
 
-      final response = await http.get(uri);
+      print('Debug - Request URL: ${uri.toString().replaceAll(_password!, '****')}');
+      final response = await http.get(uri).timeout(const Duration(seconds: 30));
+      print('Debug - Response status: ${response.statusCode}');
+      print('Debug - Response headers: ${response.headers}');
+      print('Debug - Response body: ${response.body}');
 
       if (response.statusCode == 200) {
-        final Map<String, dynamic> data = json.decode(response.body);
-        return data;
+        final data = json.decode(response.body);
+        if (data is Map<String, dynamic>) {
+          // Dizi bilgilerini döndür
+          return {
+            'name': data['name'] ?? '',
+            'plot': data['plot'] ?? '',
+            'cast': data['cast'] ?? '',
+            'director': data['director'] ?? '',
+            'genre': data['genre'] ?? '',
+            'releaseDate': data['releaseDate'] ?? '',
+            'rating': data['rating'] ?? '',
+            'cover': data['cover'] ?? '',
+            'banner': data['banner'] ?? '',
+            'episodes': data['episodes'] ?? {},
+          };
+        }
       }
       return {};
     } catch (e) {
@@ -445,26 +486,72 @@ class IptvService {
     }
   }
 
+  // Film detaylarını getir
+  Future<MovieDetails> getMovieInfo(String movieId) async {
+    final url = Uri.parse('$_serverUrl/player_api.php');
+    final response = await http.get(url.replace(queryParameters: {
+      'username': _username,
+      'password': _password,
+      'action': 'get_vod_info',
+      'vod_id': movieId,
+    }));
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return MovieDetails.fromJson(data);
+    } else {
+      throw Exception('Film bilgileri alınamadı');
+    }
+  }
+
   // Dizi bölümlerini getir
   Future<Map<String, List<Map<String, dynamic>>>> getSeriesEpisodes(String seriesId) async {
     try {
-      // Önce dizi bilgilerini al
-      final seriesInfo = await getSeriesInfo(seriesId);
-      
-      if (seriesInfo.isEmpty || seriesInfo['episodes'] == null) {
-        return {};
+      print('Debug - Getting episodes for series ID: $seriesId');
+      final uri = Uri.parse('$_serverUrl/player_api.php').replace(
+        queryParameters: {
+          'username': _username,
+          'password': _password,
+          'action': 'get_series_info',
+          'series_id': seriesId,
+        },
+      );
+
+      print('Debug - Request URL: ${uri.toString().replaceAll(_password!, '****')}');
+      final response = await http.get(uri).timeout(const Duration(seconds: 30));
+      print('Debug - Response status: ${response.statusCode}');
+      print('Debug - Response headers: ${response.headers}');
+      print('Debug - Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is Map<String, dynamic> && data['episodes'] != null) {
+          final episodes = data['episodes'] as Map<String, dynamic>;
+          final result = <String, List<Map<String, dynamic>>>{};
+          
+          episodes.forEach((season, seasonEpisodes) {
+            if (seasonEpisodes is List) {
+              final episodeList = seasonEpisodes.map((episode) {
+                if (episode is Map<String, dynamic>) {
+                  return {
+                    'id': episode['id']?.toString() ?? '',
+                    'title': episode['title'] ?? '',
+                    'container_extension': episode['container_extension'] ?? '',
+                    'info': episode['info'] ?? {},
+                    'season': season,
+                  };
+                }
+                return <String, dynamic>{};
+              }).toList();
+              
+              result[season] = episodeList;
+            }
+          });
+          
+          return result;
+        }
       }
-      
-      // Sezonlara göre bölümleri grupla
-      final Map<String, List<Map<String, dynamic>>> episodesBySeason = {};
-      final Map<String, dynamic> episodes = seriesInfo['episodes'];
-      
-      episodes.forEach((seasonKey, seasonEpisodes) {
-        final List<dynamic> episodesList = seasonEpisodes;
-        episodesBySeason[seasonKey] = episodesList.map((e) => e as Map<String, dynamic>).toList();
-      });
-      
-      return episodesBySeason;
+      return {};
     } catch (e) {
       print('Get Series Episodes error: $e');
       return {};

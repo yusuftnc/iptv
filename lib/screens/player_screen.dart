@@ -8,12 +8,16 @@ import 'dart:async';
 import 'dart:math' show max;
 
 class PlayerScreen extends StatefulWidget {
-  final ContentItem contentItem;
+  final String contentId;
+  final String streamUrl;
+  final String contentType;
 
   const PlayerScreen({
-    super.key,
-    required this.contentItem,
-  });
+    Key? key,
+    required this.contentId,
+    required this.streamUrl,
+    required this.contentType,
+  }) : super(key: key);
 
   @override
   State<PlayerScreen> createState() => _PlayerScreenState();
@@ -72,7 +76,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _checkIfFavorite() async {
-    final isFavorite = await _databaseService.isFavorite(widget.contentItem.id);
+    final isFavorite = await _databaseService.isFavorite(widget.contentId);
     if (mounted) {
       setState(() {
         _isFavorite = isFavorite;
@@ -82,9 +86,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _toggleFavorite() async {
     if (_isFavorite) {
-      await _databaseService.removeFavorite(widget.contentItem.id);
+      await _databaseService.removeFavorite(widget.contentId);
     } else {
-      await _databaseService.addFavorite(widget.contentItem);
+      await _databaseService.addFavorite(ContentItem(
+        id: widget.contentId,
+        name: '',
+        streamUrl: widget.streamUrl,
+        streamType: widget.contentType,
+      ));
     }
     
     setState(() {
@@ -94,14 +103,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _addToWatchHistory() async {
     try {
-      print("Debug - İlk izleme pozisyonu kontrolü başlatılıyor: ${widget.contentItem.id}");
-      print("Debug - İzleme geçmişine ekleniyor: ${widget.contentItem.id}");
+      print("Debug - İlk izleme pozisyonu kontrolü başlatılıyor: ${widget.contentId}");
+      print("Debug - İzleme geçmişine ekleniyor: ${widget.contentId}");
       
       // İlk olarak izleme geçmişine ekle (pozisyon olmadan)
-      await _databaseService.addToWatchHistory(widget.contentItem);
+      await _databaseService.addToWatchHistory(ContentItem(
+        id: widget.contentId,
+        name: '',
+        streamUrl: widget.streamUrl,
+        streamType: widget.contentType,
+      ));
       
       // Kaydedilmiş pozisyonu kontrol et
-      final watchHistory = await _databaseService.getWatchPosition(widget.contentItem.id);
+      final watchHistory = await _databaseService.getWatchPosition(widget.contentId);
       print("Debug - İlk kontrol - Bulunan izleme geçmişi: ${watchHistory?.position} / ${watchHistory?.duration}");
       
       print("Debug - İzleme geçmişine eklendi");
@@ -115,16 +129,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
     try {
       if (_controller != null && _currentPosition.inSeconds > 0) {
         print("Debug - İzleme pozisyonu güncelleniyor: ${_currentPosition.inSeconds} / ${_totalDuration.inSeconds}");
-        print("Debug - ContentItem ID: ${widget.contentItem.id}");
+        print("Debug - ContentItem ID: ${widget.contentId}");
         
         await _databaseService.addToWatchHistory(
-          widget.contentItem,
-          position: _currentPosition.inSeconds,
-          duration: _totalDuration.inSeconds,
+          ContentItem(
+            id: widget.contentId,
+            name: '',
+            streamUrl: widget.streamUrl,
+            streamType: widget.contentType,
+            position: _currentPosition.inSeconds,
+            duration: _totalDuration.inSeconds,
+          ),
         );
         
         // Veritabanına kaydedilen pozisyonu doğrula
-        final savedPosition = await _databaseService.getWatchPosition(widget.contentItem.id);
+        final savedPosition = await _databaseService.getWatchPosition(widget.contentId);
         print("Debug - Kaydedilen pozisyon kontrolü: ${savedPosition?.position} / ${savedPosition?.duration}");
         
         print("Debug - İzleme pozisyonu güncellendi");
@@ -139,12 +158,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _checkWatchPosition() async {
     try {
-      print("Debug - İzleme pozisyonu kontrol ediliyor: ${widget.contentItem.id}");
-      final watchHistory = await _databaseService.getWatchPosition(widget.contentItem.id);
+      print("Debug - İzleme pozisyonu kontrol ediliyor: ${widget.contentId}");
+      final watchHistory = await _databaseService.getWatchPosition(widget.contentId);
       
       print("Debug - Alınan izleme geçmişi: ${watchHistory?.position} / ${watchHistory?.duration}");
       print("Debug - İzleme geçmişi contentId: ${watchHistory?.contentId}");
-      print("Debug - Current contentItem id: ${widget.contentItem.id}");
+      print("Debug - Current contentItem id: ${widget.contentId}");
       
       if (watchHistory != null && 
           watchHistory.position != null && 
@@ -248,19 +267,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // İçerik türüne göre stream URL'ini al
       String? streamUrl;
       
-      if (widget.contentItem.streamUrl != null && widget.contentItem.streamUrl!.isNotEmpty) {
+      if (widget.streamUrl != null && widget.streamUrl.isNotEmpty) {
         // Eğer ContentItem'da zaten bir URL varsa, onu kullan
-        streamUrl = widget.contentItem.streamUrl;
+        streamUrl = widget.streamUrl;
         print('Debug - ContentItem\'dan URL kullanılıyor: $streamUrl');
       } else {
         // Yoksa, servis üzerinden URL'i al
-        final streamType = widget.contentItem.streamType ?? 'live';
+        final streamType = widget.contentType ?? 'live';
         
         // Eğer dizi bölümü ise, özel işlem yap
-        if (streamType == 'series' && widget.contentItem.id.isNotEmpty) {
+        if (streamType == 'series' && widget.contentId.isNotEmpty) {
           // Dizi bölüm ID'sini kullanarak stream URL'ini al
           streamUrl = await _iptvService.getStreamUrl(
-            streamId: widget.contentItem.id,
+            streamId: widget.contentId,
             streamType: 'series',
           );
           
@@ -273,14 +292,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
             if (serverUrl != null && username != null && password != null) {
               // Farklı formatları dene
               final formats = [
-                '$serverUrl/series/$username/$password/${widget.contentItem.id}.mp4',
-                '$serverUrl/series/$username/$password/${widget.contentItem.id}.mkv',
-                '$serverUrl/series/$username/$password/${widget.contentItem.id}.ts',
-                '$serverUrl/series/$username/$password/${widget.contentItem.id}.m3u8',
-                '$serverUrl/series/$username/$password/series/${widget.contentItem.id}.mp4',
-                '$serverUrl/series/$username/$password/series/${widget.contentItem.id}.mkv',
-                '$serverUrl/series/$username/$password/series/${widget.contentItem.id}.ts',
-                '$serverUrl/series/$username/$password/series/${widget.contentItem.id}.m3u8',
+                '$serverUrl/series/$username/$password/${widget.contentId}.mp4',
+                '$serverUrl/series/$username/$password/${widget.contentId}.mkv',
+                '$serverUrl/series/$username/$password/${widget.contentId}.ts',
+                '$serverUrl/series/$username/$password/${widget.contentId}.m3u8',
+                '$serverUrl/series/$username/$password/series/${widget.contentId}.mp4',
+                '$serverUrl/series/$username/$password/series/${widget.contentId}.mkv',
+                '$serverUrl/series/$username/$password/series/${widget.contentId}.ts',
+                '$serverUrl/series/$username/$password/series/${widget.contentId}.m3u8',
               ];
               
               // İlk formatı kullan (daha sonra diğerlerini deneyebiliriz)
@@ -291,7 +310,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         } else {
           // Normal içerik için stream URL'ini al
           streamUrl = await _iptvService.getStreamUrl(
-            streamId: widget.contentItem.id,
+            streamId: widget.contentId,
             streamType: streamType,
           );
         }
@@ -300,8 +319,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
       
       print('Debug - Stream URL: $streamUrl');
-      print('Debug - Content Type: ${widget.contentItem.streamType}');
-      print('Debug - Content ID: ${widget.contentItem.id}');
+      print('Debug - Content Type: ${widget.contentType}');
+      print('Debug - Content ID: ${widget.contentId}');
 
       if (streamUrl == null || streamUrl.isEmpty) {
         throw Exception('Stream URL bulunamadı');
@@ -309,7 +328,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
       // İlk önce izleme pozisyonunu al
       print("Debug - Video yüklenmeden önce izleme pozisyonu kontrol ediliyor.");
-      final watchHistory = await _databaseService.getWatchPosition(widget.contentItem.id);
+      final watchHistory = await _databaseService.getWatchPosition(widget.contentId);
       print("Debug - İzleme geçmişi: ${watchHistory?.position} / ${watchHistory?.duration}");
       
       // İzleme pozisyonu uygun mu kontrol et
@@ -352,7 +371,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       
       // Controller'ı eğer izleme pozisyonu varsa ve bu bir film/diziyse (live değilse)
       // autoPlay:false ile başlat, böylece ilk frame'de pozisyona atlaması daha kolay olur
-      final isLiveContent = widget.contentItem.streamType == 'live';
+      final isLiveContent = widget.contentType == 'live';
       final shouldAutoPlay = isLiveContent || !shouldResume;
       
       _controller = VlcPlayerController.network(
@@ -631,9 +650,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // Senkron olarak çalıştırmak için hemen güncelle
       try {
         _databaseService.addToWatchHistory(
-          widget.contentItem,
-          position: _currentPosition.inSeconds,
-          duration: _totalDuration.inSeconds,
+          ContentItem(
+            id: widget.contentId,
+            name: '',
+            streamUrl: widget.streamUrl,
+            streamType: widget.contentType,
+            position: _currentPosition.inSeconds,
+            duration: _totalDuration.inSeconds,
+          ),
         );
         print("Debug - Son izleme pozisyonu kaydedildi: ${_currentPosition.inSeconds} / ${_totalDuration.inSeconds}");
       } catch (e) {
@@ -934,7 +958,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         // İçerik başlığı - ortada
         Expanded(
           child: Text(
-            widget.contentItem.name,
+            '',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 16,
@@ -1030,7 +1054,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         // İçerik başlığı - ortada
         Expanded(
           child: Text(
-            widget.contentItem.name,
+            '',
             style: const TextStyle(
               color: Colors.white,
               fontSize: 16,

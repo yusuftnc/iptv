@@ -4,12 +4,15 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/content_item.dart';
 import '../services/iptv_service.dart';
 import '../services/storage_service.dart';
+import '../models/movie_details.dart';
 import 'login_screen.dart';
 import 'player_screen.dart';
 import 'series_detail_screen.dart';
 import 'search_screen.dart';
 import 'favorites_screen.dart';
 import 'watch_history_screen.dart';
+import 'movie_details_screen.dart';
+import '../models/content.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -86,40 +89,49 @@ class _HomeScreenState extends State<HomeScreen> {
     }
   }
   
-  Future<void> _loadCategoryContent(String categoryId, String categoryName, String contentType) async {
+  Future<void> _loadCategoryContent(String categoryId, String categoryType) async {
     try {
       setState(() {
         _isLoading = true;
         _errorMessage = '';
-        _selectedCategoryId = categoryId;
-        _selectedCategoryName = categoryName;
       });
-      
+
       List<Map<String, dynamic>> content = [];
       
-      switch (contentType) {
+      switch (categoryType) {
         case 'live':
           content = await _iptvService.getChannels(categoryId);
           break;
         case 'movie':
-          content = await _iptvService.getMovies().then((movies) => 
-            movies.where((movie) => movie['category_id'].toString() == categoryId).toList());
+          final allMovies = await _iptvService.getMovies();
+          content = allMovies.where((movie) => 
+            movie['category_id']?.toString() == categoryId
+          ).toList();
           break;
         case 'series':
-          content = await _iptvService.getSeries().then((series) => 
-            series.where((serie) => serie['category_id'].toString() == categoryId).toList());
+          final allSeries = await _iptvService.getSeries();
+          content = allSeries.where((serie) => 
+            serie['category_id']?.toString() == categoryId
+          ).toList();
           break;
       }
+
+      print('Debug - Loaded content for category $categoryId: ${content.length} items');
       
-      setState(() {
-        _selectedCategoryContent = content;
-        _isLoading = false;
-      });
+      if (mounted) {
+        setState(() {
+          _selectedCategoryContent = content;
+          _isLoading = false;
+        });
+      }
     } catch (e) {
-      setState(() {
-        _errorMessage = 'Kategori içeriği yüklenirken hata oluştu: ${e.toString()}';
-        _isLoading = false;
-      });
+      print('Debug - Error loading category content: $e');
+      if (mounted) {
+        setState(() {
+          _errorMessage = 'İçerik yüklenirken bir hata oluştu: ${e.toString()}';
+          _isLoading = false;
+        });
+      }
     }
   }
 
@@ -408,11 +420,11 @@ class _HomeScreenState extends State<HomeScreen> {
       case 0: // Yeniler
         return _buildNewContent();
       case 1: // TV Kanalları
-        return _buildCategoryList(_liveCategories);
+        return _buildCategoryList();
       case 2: // Filmler
-        return _buildCategoryList(_movieCategories);
+        return _buildCategoryList();
       case 3: // Diziler
-        return _buildCategoryList(_seriesCategories);
+        return _buildCategoryList();
       default:
         return const Center(
           child: Text(
@@ -432,27 +444,35 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Widget _buildCategoryList(List<Map<String, dynamic>> categories) {
+  Widget _buildCategoryList() {
     return ListView.separated(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: categories.length,
+      itemCount: _currentIndex == 1 ? _liveCategories.length : _currentIndex == 2 ? _movieCategories.length : _seriesCategories.length,
       separatorBuilder: (context, index) => const Divider(height: 1),
       itemBuilder: (context, index) {
-        final category = categories[index];
+        final category = _currentIndex == 1 ? _liveCategories[index] : _currentIndex == 2 ? _movieCategories[index] : _seriesCategories[index];
         return ListTile(
           leading: Icon(
             _getCategoryIcon(category['category_name']),
             color: Colors.white,
           ),
           title: Text(
-            category['category_name'],
+            category['category_name'] ?? 'Unknown',
             style: const TextStyle(color: Colors.white),
           ),
-          onTap: () => _loadCategoryContent(
-            category['category_id'].toString(),
-            category['category_name'] ?? 'İsimsiz Kategori',
-            _currentContentType,
-          ),
+          onTap: () {
+            setState(() {
+              _selectedCategoryId = category['category_id'].toString();
+              _selectedCategoryName = category['category_name'];
+              _currentContentType = _currentIndex == 1 ? 'live' 
+                  : _currentIndex == 2 ? 'movie' 
+                  : 'series';
+            });
+            _loadCategoryContent(
+              category['category_id'].toString(),
+              _currentContentType,
+            );
+          },
         );
       },
     );
@@ -494,8 +514,55 @@ class _HomeScreenState extends State<HomeScreen> {
           child: Card(
             clipBehavior: Clip.antiAlias,
             child: InkWell(
-              onTap: () {
-                _playContent(contentItem);
+              onTap: () async {
+                try {
+                  print('Debug - Content item: $item');
+                  print('Debug - Current content type: $_currentContentType');
+                  final contentId = _currentContentType == 'live' ? item['stream_id'].toString() :
+                                  _currentContentType == 'movie' ? item['stream_id'].toString() :
+                                  item['series_id'].toString();
+                  print('Debug - Content ID: $contentId');
+                  
+                  if (_currentContentType == 'series') {
+                    print('Debug - Series ID: ${item['series_id']}');
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => SeriesDetailScreen(
+                          seriesItem: ContentItem.fromJson(item, 'series'),
+                        ),
+                      ),
+                    );
+                    return;
+                  }
+                  
+                  String? streamUrl = await _iptvService.getStreamUrl(
+                    streamId: contentId,
+                    streamType: _currentContentType,
+                  );
+                  print('Debug - Stream URL: $streamUrl');
+                  
+                  if (streamUrl != null && mounted) {
+                    _playContent(contentId, streamUrl, _currentContentType);
+                  } else if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      const SnackBar(
+                        content: Text('Stream URL bulunamadı'),
+                        duration: Duration(seconds: 3),
+                      ),
+                    );
+                  }
+                } catch (e) {
+                  print('Debug - Error getting stream URL: $e');
+                  if (mounted) {
+                    ScaffoldMessenger.of(context).showSnackBar(
+                      SnackBar(
+                        content: Text('Hata: ${e.toString()}'),
+                        duration: const Duration(seconds: 3),
+                      ),
+                    );
+                  }
+                }
               },
               child: Stack(
                 fit: StackFit.expand,
@@ -565,29 +632,41 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  void _playContent(ContentItem item) {
-    // Eğer içerik türü dizi ise, dizi detay ekranına yönlendir
-    if (item.streamType == 'series') {
-      Navigator.push(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => SeriesDetailScreen(seriesItem: item),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-          transitionDuration: const Duration(milliseconds: 100),
-        ),
-      );
-    } else {
-      // Diğer içerik türleri için doğrudan oynatıcıya yönlendir
-      Navigator.push(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => PlayerScreen(contentItem: item),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-          transitionDuration: const Duration(milliseconds: 100),
+  Future<void> _playContent(String contentId, String streamUrl, String contentType) async {
+    try {
+      if (contentType == 'movie') {
+        final movieDetails = await _iptvService.getMovieInfo(contentId);
+        if (!mounted) return;
+        
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MovieDetailsScreen(
+              contentId: contentId,
+              streamUrl: streamUrl,
+              movieDetails: movieDetails,
+            ),
+          ),
+        );
+      } else {
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PlayerScreen(
+              streamUrl: streamUrl,
+              contentId: contentId,
+              contentType: contentType,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text('Failed to load content: ${e.toString()}'),
+          duration: const Duration(seconds: 3),
         ),
       );
     }
@@ -672,78 +751,6 @@ class _HomeScreenState extends State<HomeScreen> {
     } else {
       return Icons.tv;
     }
-  }
-
-  Widget _buildContentList(List<Map<String, dynamic>> items) {
-    return ListView.builder(
-      padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: items.length,
-      // Scroll performansı için cacheExtent ekliyoruz
-      cacheExtent: 500,
-      // Scroll sırasında gereksiz yeniden oluşturmaları engellemek için
-      addAutomaticKeepAlives: true,
-      itemBuilder: (context, index) {
-        final item = items[index];
-        return RepaintBoundary(
-          child: ListTile(
-            leading: ClipRRect(
-              borderRadius: BorderRadius.circular(4),
-              child: item['stream_icon'] != null && item['stream_icon'].isNotEmpty
-                  ? CachedNetworkImage(
-                      imageUrl: item['stream_icon'],
-                      width: 40,
-                      height: 40,
-                      fit: BoxFit.cover,
-                      memCacheWidth: 80, // Önbellek boyutunu optimize ediyoruz
-                      memCacheHeight: 80,
-                      placeholder: (context, url) => const SizedBox(
-                        width: 40,
-                        height: 40,
-                        child: Center(
-                          child: CircularProgressIndicator(
-                            strokeWidth: 2,
-                          ),
-                        ),
-                      ),
-                      errorWidget: (context, url, error) => const SizedBox(
-                        width: 40,
-                        height: 40,
-                        child: Icon(
-                          Icons.error_outline,
-                          color: Colors.red,
-                          size: 24,
-                        ),
-                      ),
-                    )
-                  : const SizedBox(
-                      width: 40,
-                      height: 40,
-                      child: Icon(
-                        Icons.video_library,
-                        color: Colors.white,
-                        size: 24,
-                      ),
-                    ),
-            ),
-            title: Text(
-              item['name'] ?? 'İsimsiz İçerik',
-              style: const TextStyle(color: Colors.white),
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
-            ),
-            subtitle: item['description'] != null && item['description'].isNotEmpty
-                ? Text(
-                    item['description'],
-                    style: const TextStyle(color: Colors.grey),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  )
-                : null,
-            onTap: () => _playContent(ContentItem.fromJson(item, _currentContentType)),
-          ),
-        );
-      },
-    );
   }
 }
 

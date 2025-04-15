@@ -77,32 +77,33 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen> {
   }
 
   void _playContent(WatchHistory item) {
-    // İçerik tipine göre uygun ekrana yönlendir
     final contentItem = ContentItem(
       id: item.contentId,
       name: item.name,
-      streamUrl: item.streamUrl ?? '',
+      streamUrl: item.streamUrl,
       streamType: item.streamType,
-      streamIcon: item.streamIcon,
-      category: item.category,
+      position: item.position,
+      duration: item.duration,
     );
 
     if (item.streamType == 'series') {
-      // Dizi detay ekranına git
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => SeriesDetailScreen(seriesItem: contentItem),
         ),
-      );
+      ).then((_) => _loadWatchHistory());
     } else {
-      // Player ekranına git
       Navigator.push(
         context,
         MaterialPageRoute(
-          builder: (context) => PlayerScreen(contentItem: contentItem),
+          builder: (context) => PlayerScreen(
+            contentId: contentItem.id,
+            streamUrl: contentItem.streamUrl ?? '',
+            contentType: contentItem.streamType ?? 'movie',
+          ),
         ),
-      ).then((_) => _loadWatchHistory()); // Geri dönünce izleme geçmişini yenile
+      ).then((_) => _loadWatchHistory());
     }
   }
 
