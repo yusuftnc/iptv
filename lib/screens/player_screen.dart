@@ -54,6 +54,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   int _seekAttemptCount = 0;
   final int _maxSeekAttempts = 5;
 
+  // Last saved position
+  Duration? _lastSavedPosition;
+
   @override
   void initState() {
     super.initState();
@@ -65,14 +68,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
     ]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
     
-    // Video oynatıcıyı başlat
-    _initializePlayer();
-    
-    // Favorilerde olup olmadığını kontrol et
-    _checkIfFavorite();
-    
-    // Kontrolleri göster
-    _startHideControlsTimer();
+    // Önce izleme pozisyonunu kontrol et
+    _checkWatchPosition().then((_) {
+      // Sonra video oynatıcıyı başlat
+      _initializePlayer();
+      
+      // Favorilerde olup olmadığını kontrol et
+      _checkIfFavorite();
+      
+      // Kontrolleri göster
+      _startHideControlsTimer();
+    });
   }
 
   Future<void> _checkIfFavorite() async {
@@ -106,17 +112,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       print("Debug - İlk izleme pozisyonu kontrolü başlatılıyor: ${widget.contentId}");
       print("Debug - İzleme geçmişine ekleniyor: ${widget.contentId}");
       
-      // İlk olarak izleme geçmişine ekle (pozisyon olmadan)
+      // İlk olarak izleme geçmişine ekle
       await _databaseService.addToWatchHistory(ContentItem(
         id: widget.contentId,
         name: '',
         streamUrl: widget.streamUrl,
         streamType: widget.contentType,
       ));
-      
-      // Kaydedilmiş pozisyonu kontrol et
-      final watchHistory = await _databaseService.getWatchPosition(widget.contentId);
-      print("Debug - İlk kontrol - Bulunan izleme geçmişi: ${watchHistory?.position} / ${watchHistory?.duration}");
       
       print("Debug - İzleme geçmişine eklendi");
       
@@ -127,20 +129,24 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _updateWatchPosition() async {
     try {
-      if (_controller != null && _currentPosition.inSeconds > 0) {
+      if (_controller != null && 
+          _currentPosition.inSeconds > 0 && 
+          _totalDuration.inSeconds > 0 &&
+          _currentPosition.inSeconds < _totalDuration.inSeconds) {
+        
         print("Debug - İzleme pozisyonu güncelleniyor: ${_currentPosition.inSeconds} / ${_totalDuration.inSeconds}");
         print("Debug - ContentItem ID: ${widget.contentId}");
         
-        await _databaseService.addToWatchHistory(
-          ContentItem(
-            id: widget.contentId,
-            name: '',
-            streamUrl: widget.streamUrl,
-            streamType: widget.contentType,
-            position: _currentPosition.inSeconds,
-            duration: _totalDuration.inSeconds,
-          ),
+        final contentItem = ContentItem(
+          id: widget.contentId,
+          name: '',
+          streamUrl: widget.streamUrl,
+          streamType: widget.contentType,
+          position: _currentPosition.inSeconds,
+          duration: _totalDuration.inSeconds,
         );
+        
+        await _databaseService.addToWatchHistory(contentItem);
         
         // Veritabanına kaydedilen pozisyonu doğrula
         final savedPosition = await _databaseService.getWatchPosition(widget.contentId);
@@ -184,7 +190,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
               actions: [
                 TextButton(
-                  onPressed: () => Navigator.pop(context, false),
+                  onPressed: () {
+                    // Baştan başla seçildiğinde pozisyonu sıfırla
+                    _databaseService.addToWatchHistory(ContentItem(
+                      id: widget.contentId,
+                      name: '',
+                      streamUrl: widget.streamUrl,
+                      streamType: widget.contentType,
+                      position: 0,
+                      duration: watchHistory.duration,
+                    ));
+                    Navigator.pop(context, false);
+                  },
                   child: const Text('Hayır, Baştan Başla'),
                 ),
                 TextButton(
@@ -554,9 +571,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
             _totalDuration = duration;
           });
           
-          // Her 15 saniyede bir izleme pozisyonunu veritabanına kaydet (daha sık kaydet)
-          if (position.inSeconds % 15 == 0 && position.inSeconds > 0) {
+          // Her 5 saniyede bir ve pozisyon değiştiğinde kaydet
+          if ((position.inSeconds % 5 == 0 || 
+              (position.inSeconds - (_lastSavedPosition?.inSeconds ?? 0)).abs() >= 5) && 
+              position.inSeconds > 0) {
             _updateWatchPosition();
+            _lastSavedPosition = position;
           }
         }
       }
@@ -642,45 +662,34 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
+  void _videoListener() {
+    if (!mounted) return;
+    
+    final position = _controller?.value.position;
+    if (position != null) {
+      setState(() {
+        _currentPosition = position;
+      });
+    }
+  }
+
+  void _startPositionTimer() {
+    _positionUpdateTimer?.cancel();
+    _positionUpdateTimer = Timer.periodic(const Duration(seconds: 5), (timer) {
+      if (_controller?.value.isPlaying ?? false) {
+        _updateWatchPosition();
+      }
+    });
+  }
+
   @override
   void dispose() {
-    // Video kapanırken izleme pozisyonunu kaydet
+    // Video kapanmadan önce son pozisyonu kaydet
     if (_controller != null && _currentPosition.inSeconds > 0) {
-      print("Debug - Ekran kapanırken son izleme pozisyonu kaydediliyor: ${_currentPosition.inSeconds}");
-      // Senkron olarak çalıştırmak için hemen güncelle
-      try {
-        _databaseService.addToWatchHistory(
-          ContentItem(
-            id: widget.contentId,
-            name: '',
-            streamUrl: widget.streamUrl,
-            streamType: widget.contentType,
-            position: _currentPosition.inSeconds,
-            duration: _totalDuration.inSeconds,
-          ),
-        );
-        print("Debug - Son izleme pozisyonu kaydedildi: ${_currentPosition.inSeconds} / ${_totalDuration.inSeconds}");
-      } catch (e) {
-        print("Debug - Son izleme pozisyonu kaydedilirken hata: $e");
-      }
+      _updateWatchPosition();
     }
-    
-    // Timer'ları iptal et
-    _hideControlsTimer?.cancel();
     _positionUpdateTimer?.cancel();
-    
-    // Kontrolcüyü temizle
-    _controller?.stop();
     _controller?.dispose();
-    
-    // Uygulama kapanınca normal moda dönüş
-    SystemChrome.setPreferredOrientations([
-      DeviceOrientation.portraitUp,
-      DeviceOrientation.portraitDown,
-      DeviceOrientation.landscapeLeft,
-      DeviceOrientation.landscapeRight,
-    ]);
-    SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
     super.dispose();
   }
 

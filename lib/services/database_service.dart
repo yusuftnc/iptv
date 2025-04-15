@@ -59,9 +59,9 @@ class DatabaseService {
     return history;
   }
   
-  Future<void> addToWatchHistory(ContentItem contentItem, {int? position, int? duration}) async {
+  Future<void> addToWatchHistory(ContentItem contentItem) async {
     try {
-      print("Debug - Database addToWatchHistory - ContentID: ${contentItem.id}, Pozisyon: $position, Süre: $duration");
+      print("Debug - Database addToWatchHistory - ContentID: ${contentItem.id}, Pozisyon: ${contentItem.position}, Süre: ${contentItem.duration}");
       final box = await Hive.openBox<WatchHistory>(_watchHistoryBox);
       
       final watchItem = WatchHistory(
@@ -69,8 +69,8 @@ class DatabaseService {
         name: contentItem.name,
         streamType: contentItem.streamType ?? 'live',
         streamIcon: contentItem.streamIcon,
-        position: position,
-        duration: duration,
+        position: contentItem.position,
+        duration: contentItem.duration,
         streamUrl: contentItem.streamUrl,
         category: contentItem.category,
       );

@@ -182,6 +182,7 @@ class IptvService {
 
   Future<bool> login() async {
     try {
+      print('Debug - Attempting login with URL: $_serverUrl');
       final response = await _dio.get(
         '$_serverUrl/player_api.php',
         queryParameters: {
@@ -199,17 +200,28 @@ class IptvService {
         ),
       );
 
+      print('Debug - Login response status: ${response.statusCode}');
+      print('Debug - Login response data: ${response.data}');
+
       if (response.statusCode == 200) {
         final data = response.data;
         if (data is Map<String, dynamic>) {
+          print('Debug - Login successful, user info received');
           _userInfo = data;
           _isLoggedIn = true;
           return true;
+        } else {
+          print('Debug - Login failed: Response data is not a Map');
+          return false;
         }
       }
+      print('Debug - Login failed: Status code ${response.statusCode}');
       return false;
     } on DioException catch (e) {
-      print('Login error: ${e.message}');
+      print('Debug - Login DioException: ${e.message}');
+      print('Debug - DioException type: ${e.type}');
+      print('Debug - DioException response: ${e.response?.data}');
+      
       if (e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.receiveTimeout) {
         throw Exception('Bağlantı zaman aşımına uğradı. Lütfen internet bağlantınızı kontrol edin.');
@@ -218,7 +230,7 @@ class IptvService {
       }
       throw Exception('Login failed: ${e.message}');
     } catch (e) {
-      print('Unexpected login error: $e');
+      print('Debug - Unexpected login error: $e');
       throw Exception('Beklenmeyen bir hata oluştu: $e');
     }
   }
