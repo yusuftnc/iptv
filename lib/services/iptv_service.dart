@@ -3,6 +3,7 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
 import '../models/movie_details.dart';
+import 'package:flutter/foundation.dart';
 
 class IptvService {
   String? _host;
@@ -457,8 +458,12 @@ class IptvService {
   // Dizi detaylarını getir
   Future<Map<String, dynamic>> getSeriesInfo(String seriesId) async {
     try {
-      print('Debug - Getting series info for ID: $seriesId');
-      final uri = Uri.parse('$_serverUrl/player_api.php').replace(
+      if (!_isLoggedIn) {
+        throw Exception('User not logged in');
+      }
+
+      final response = await _dio.get(
+        '$_serverUrl/player_api.php',
         queryParameters: {
           'username': _username,
           'password': _password,
@@ -467,34 +472,42 @@ class IptvService {
         },
       );
 
-      print('Debug - Request URL: ${uri.toString().replaceAll(_password!, '****')}');
-      final response = await http.get(uri).timeout(const Duration(seconds: 30));
-      print('Debug - Response status: ${response.statusCode}');
-      print('Debug - Response headers: ${response.headers}');
-      print('Debug - Response body: ${response.body}');
+      debugPrint('Debug - Response status: ${response.statusCode}');
+      debugPrint('Debug - HAM API YANITI:');
+      debugPrint(response.data.toString());
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data is Map<String, dynamic>) {
-          // Dizi bilgilerini döndür
-          return {
-            'name': data['name'] ?? '',
-            'plot': data['plot'] ?? '',
-            'cast': data['cast'] ?? '',
-            'director': data['director'] ?? '',
-            'genre': data['genre'] ?? '',
-            'releaseDate': data['releaseDate'] ?? '',
-            'rating': data['rating'] ?? '',
-            'cover': data['cover'] ?? '',
-            'banner': data['banner'] ?? '',
-            'episodes': data['episodes'] ?? {},
-          };
-        }
+        final data = response.data;
+        
+        // Tüm dizi bilgilerini koru
+        final seriesInfo = {
+          'name': data['info']['name'] ?? '',
+          'plot': data['info']['plot'] ?? '',
+          'cast': data['info']['cast'] ?? '',
+          'director': data['info']['director'] ?? '',
+          'genre': data['info']['genre'] ?? '',
+          'releaseDate': data['info']['releaseDate'] ?? '',
+          'rating': data['info']['rating'] ?? '',
+          'rating_5based': data['info']['rating_5based'] ?? 0,
+          'cover': data['info']['cover'] ?? '',
+          'banner': data['info']['banner'] ?? '',
+          'backdrop_path': data['info']['backdrop_path'] ?? [],
+          'youtube_trailer': data['info']['youtube_trailer'] ?? '',
+          'episode_run_time': data['info']['episode_run_time'] ?? '',
+          'seasons': data['seasons'] ?? [],
+          'episodes': data['episodes'] ?? {},
+        };
+
+        debugPrint('Debug - İşlenmiş dizi bilgileri:');
+        debugPrint(seriesInfo.toString());
+
+        return seriesInfo;
+      } else {
+        throw Exception('Failed to get series info: ${response.statusCode}');
       }
-      return {};
     } catch (e) {
-      print('Get Series Info error: $e');
-      return {};
+      debugPrint('Error getting series info: $e');
+      rethrow;
     }
   }
 

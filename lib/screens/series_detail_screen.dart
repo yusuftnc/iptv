@@ -216,40 +216,88 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     final releaseDate = _seriesInfo['releaseDate'] ?? '';
     final rating = _seriesInfo['rating'] ?? '';
     
+    // Rating'i 10 üzerinden alıp 5 üzerine çevir
+    double ratingValue = 0;
+    if (rating.isNotEmpty) {
+      try {
+        ratingValue = double.parse(rating) / 2;
+      } catch (e) {
+        ratingValue = 0;
+      }
+    }
+    
     return Container(
       padding: const EdgeInsets.all(16),
       child: Row(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          // Poster
-          if (widget.seriesItem.streamIcon != null && widget.seriesItem.streamIcon!.isNotEmpty)
-            ClipRRect(
-              borderRadius: BorderRadius.circular(8),
-              child: CachedNetworkImage(
-                imageUrl: widget.seriesItem.streamIcon!,
-                width: 120,
-                height: 180,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => Container(
-                  width: 120,
-                  height: 180,
-                  color: Colors.grey[800],
-                  child: const Center(
-                    child: CircularProgressIndicator(),
+          // Poster, Yıldızlar ve Tarih
+          Column(
+            children: [
+              if (widget.seriesItem.streamIcon != null && widget.seriesItem.streamIcon!.isNotEmpty)
+                ClipRRect(
+                  borderRadius: BorderRadius.circular(8),
+                  child: CachedNetworkImage(
+                    imageUrl: widget.seriesItem.streamIcon!,
+                    width: 120,
+                    height: 180,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) => Container(
+                      width: 120,
+                      height: 180,
+                      color: Colors.grey[800],
+                      child: const Center(
+                        child: CircularProgressIndicator(),
+                      ),
+                    ),
+                    errorWidget: (context, url, error) => Container(
+                      width: 120,
+                      height: 180,
+                      color: Colors.grey[800],
+                      child: const Icon(
+                        Icons.video_library,
+                        color: Colors.white,
+                        size: 40,
+                      ),
+                    ),
                   ),
                 ),
-                errorWidget: (context, url, error) => Container(
-                  width: 120,
-                  height: 180,
-                  color: Colors.grey[800],
-                  child: const Icon(
-                    Icons.video_library,
-                    color: Colors.white,
-                    size: 40,
-                  ),
+              if (rating.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: List.generate(5, (index) {
+                    if (index < ratingValue.floor()) {
+                      return const Icon(Icons.star, color: Colors.amber, size: 16);
+                    } else if (index == ratingValue.floor() && ratingValue % 1 >= 0.5) {
+                      return const Icon(Icons.star_half, color: Colors.amber, size: 16);
+                    } else {
+                      return const Icon(Icons.star_border, color: Colors.amber, size: 16);
+                    }
+                  }),
                 ),
-              ),
-            ),
+                const SizedBox(height: 4),
+                Text(
+                  rating,
+                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                ),
+              ],
+              if (releaseDate.isNotEmpty) ...[
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    const Icon(Icons.calendar_today, color: Colors.blue, size: 14),
+                    const SizedBox(width: 4),
+                    Text(
+                      releaseDate,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                    ),
+                  ],
+                ),
+              ],
+            ],
+          ),
           
           const SizedBox(width: 16),
           
@@ -309,29 +357,6 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                   ),
                   const SizedBox(height: 8),
                 ],
-                
-                Row(
-                  children: [
-                    if (rating.isNotEmpty) ...[
-                      const Icon(Icons.star, color: Colors.amber, size: 16),
-                      const SizedBox(width: 4),
-                      Text(
-                        rating,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      const SizedBox(width: 16),
-                    ],
-                    
-                    if (releaseDate.isNotEmpty) ...[
-                      const Icon(Icons.calendar_today, color: Colors.blue, size: 16),
-                      const SizedBox(width: 4),
-                      Text(
-                        releaseDate,
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ],
-                  ],
-                ),
               ],
             ),
           ),

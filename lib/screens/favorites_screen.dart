@@ -57,6 +57,9 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
       name: item.name,
       streamUrl: item.streamUrl,
       streamType: item.streamType,
+      streamIcon: item.streamIcon,
+      description: item.description,
+      category: item.category,
     );
 
     if (item.streamType == 'series') {
