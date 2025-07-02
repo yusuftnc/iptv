@@ -1,5 +1,9 @@
 import 'dart:convert';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+import 'package:dio/dio.dart';
+import '../models/movie_details.dart';
+import 'package:flutter/foundation.dart';
 
 class IptvService {
   String? _host;
@@ -8,11 +12,70 @@ class IptvService {
   String? _password;
   String? _serverUrl;
   Map<String, String> _categoryNames = {};
+  Map<String, dynamic>? _userInfo;
+  bool _isLoggedIn = false;
+  late final Dio _dio;
+  
+  // Arama geçmişi için anahtar
+  static const String _searchHistoryKey = 'search_history';
+
+  // Her içerik türü için çalışan formatı önbellekte tut
+  final Map<String, String> _formatCache = {};
+  
+  // Her içerik türü için olası formatlar
+  final Map<String, List<String>> _formatTemplates = {
+    'live': [
+      '{server}/live/{user}/{pass}/{id}.ts',
+      '{server}/live/{user}/{pass}/{id}.m3u8',
+      '{server}/streaming/live/{id}?username={user}&password={pass}',
+      '{server}/hls/{user}/{pass}/{id}/index.m3u8',
+      '{server}/{user}/{pass}/{id}'
+    ],
+    'movie': [
+      '{server}/movie/{user}/{pass}/{id}.mkv',
+      '{server}/movie/{user}/{pass}/{id}.mp4',
+      '{server}/vod/{user}/{pass}/{id}.mkv',
+      '{server}/vod/{user}/{pass}/{id}.mp4',
+      '{server}/vod/{user}/{pass}/{id}.avi',
+      '{server}/film/{user}/{pass}/{id}.mp4',
+      '{server}/film/{user}/{pass}/{id}.mkv',
+      '{server}/streaming/vod/{id}?username={user}&password={pass}',
+      '{server}/{user}/{pass}/{id}'
+    ],
+    'series': [
+      '{server}/series/{user}/{pass}/{id}.mp4',
+      '{server}/series/{user}/{pass}/{id}.mkv',
+      '{server}/series/{user}/{pass}/{id}.ts',
+      '{server}/series/{user}/{pass}/{id}.m3u8',
+      '{server}/series/{user}/{pass}/{id}',
+      '{server}/series/{user}/{pass}/{id}/index.m3u8',
+      '{server}/series/{user}/{pass}/series/{id}.mp4',
+      '{server}/series/{user}/{pass}/series/{id}.mkv',
+      '{server}/series/{user}/{pass}/series/{id}.ts',
+      '{server}/series/{user}/{pass}/series/{id}.m3u8',
+      '{server}/streaming/series/{id}?username={user}&password={pass}',
+      '{server}/player_api.php?username={user}&password={pass}&action=get_series_info&series_id={id}',
+      '{server}/vod/{user}/{pass}/{id}.mp4',
+      '{server}/vod/{user}/{pass}/{id}.mkv',
+      '{server}/{user}/{pass}/{id}'
+    ]
+  };
 
   // Singleton pattern
   static final IptvService _instance = IptvService._internal();
   factory IptvService() => _instance;
-  IptvService._internal();
+  IptvService._internal() {
+    _dio = Dio(BaseOptions(
+      connectTimeout: const Duration(seconds: 30),
+      receiveTimeout: const Duration(seconds: 30),
+      sendTimeout: const Duration(seconds: 30),
+    ));
+  }
+
+  // Getter metodları
+  String? getServerUrl() => _serverUrl;
+  String? getUsername() => _username;
+  String? getPassword() => _password;
 
   Future<void> initialize({
     required String host,
@@ -25,6 +88,9 @@ class IptvService {
     _username = username;
     _password = password;
     _serverUrl = 'http://$_host:$_port';
+    
+    // Önbelleği temizle (yeni giriş yapıldığında)
+    _formatCache.clear();
   }
 
   Future<void> _loadCategories() async {
@@ -54,7 +120,7 @@ class IptvService {
         },
       );
 
-      final response = await http.get(uri);
+      final response = await http.get(uri).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -78,7 +144,7 @@ class IptvService {
         },
       );
 
-      final response = await http.get(uri);
+      final response = await http.get(uri).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -102,7 +168,7 @@ class IptvService {
         },
       );
 
-      final response = await http.get(uri);
+      final response = await http.get(uri).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -116,23 +182,57 @@ class IptvService {
   }
 
   Future<bool> login() async {
-    if (_serverUrl == null || _username == null || _password == null) {
-      throw Exception('IptvService not initialized');
-    }
-
     try {
-      final response = await http.get(
-        Uri.parse('$_serverUrl/player_api.php?username=$_username&password=$_password'),
-        headers: {'Content-Type': 'application/json'},
-      ).timeout(const Duration(seconds: 10));
+      print('Debug - Attempting login with URL: $_serverUrl');
+      final response = await _dio.get(
+        '$_serverUrl/player_api.php',
+        queryParameters: {
+          'username': _username,
+          'password': _password,
+        },
+        options: Options(
+          headers: {
+            'User-Agent': 'Mozilla/5.0',
+            'Accept': 'application/json',
+          },
+          validateStatus: (status) => status! < 500,
+          receiveTimeout: const Duration(seconds: 30),
+          sendTimeout: const Duration(seconds: 30),
+        ),
+      );
+
+      print('Debug - Login response status: ${response.statusCode}');
+      print('Debug - Login response data: ${response.data}');
 
       if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        return data['user_info'] != null && data['user_info']['auth'] == 1;
+        final data = response.data;
+        if (data is Map<String, dynamic>) {
+          print('Debug - Login successful, user info received');
+          _userInfo = data;
+          _isLoggedIn = true;
+          return true;
+        } else {
+          print('Debug - Login failed: Response data is not a Map');
+          return false;
+        }
       }
+      print('Debug - Login failed: Status code ${response.statusCode}');
       return false;
+    } on DioException catch (e) {
+      print('Debug - Login DioException: ${e.message}');
+      print('Debug - DioException type: ${e.type}');
+      print('Debug - DioException response: ${e.response?.data}');
+      
+      if (e.type == DioExceptionType.connectionTimeout ||
+          e.type == DioExceptionType.receiveTimeout) {
+        throw Exception('Bağlantı zaman aşımına uğradı. Lütfen internet bağlantınızı kontrol edin.');
+      } else if (e.type == DioExceptionType.connectionError) {
+        throw Exception('Sunucuya bağlanılamıyor. Lütfen internet bağlantınızı kontrol edin.');
+      }
+      throw Exception('Login failed: ${e.message}');
     } catch (e) {
-      throw Exception('Login failed: $e');
+      print('Debug - Unexpected login error: $e');
+      throw Exception('Beklenmeyen bir hata oluştu: $e');
     }
   }
 
@@ -158,77 +258,122 @@ class IptvService {
   }
 
   Future<List<Map<String, dynamic>>> getChannels(String categoryId) async {
-    if (_serverUrl == null || _username == null || _password == null) {
-      throw Exception('IptvService not initialized');
-    }
-
     try {
-      final response = await http.get(
-        Uri.parse('$_serverUrl/player_api.php?username=$_username&password=$_password&action=get_live_streams&category_id=$categoryId'),
-        headers: {'Content-Type': 'application/json'},
-      ).timeout(const Duration(seconds: 10));
+      print('Debug - Getting channels for category: $categoryId');
+      final uri = Uri.parse('$_serverUrl/player_api.php').replace(
+        queryParameters: {
+          'username': _username,
+          'password': _password,
+          'action': 'get_live_streams',
+          'category_id': categoryId,
+        },
+      );
+
+      print('Debug - Request URL: ${uri.toString()}');
+      final response = await http.get(uri).timeout(const Duration(seconds: 30));
+      print('Debug - Response status: ${response.statusCode}');
+      print('Debug - Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        return data.map((item) => item as Map<String, dynamic>).toList();
+        if (data is List) {
+          return data.map((item) => Map<String, dynamic>.from(item)).toList();
+        }
       }
-      throw Exception('Failed to load channels: ${response.statusCode}');
+      return [];
     } catch (e) {
-      throw Exception('Failed to load channels: $e');
+      print('Debug - Get Live TV error: $e');
+      return [];
     }
   }
 
   Future<String?> getStreamUrl({
     required String streamId,
     required String streamType,
-    String extension = 'ts',
   }) async {
     if (_serverUrl == null || _username == null || _password == null) {
       throw Exception('IptvService not initialized');
     }
     
-    // Modern IPTV sistemleri için XC style URL
-    final xcStyleUrl = '$_serverUrl/$streamType/$_username/$_password/$streamId.$extension';
-    
-    // Eski stil URL (bazı sistemler hala bunu kullanır)
-    final legacyStyleUrl = '$_serverUrl/streaming/$streamType/$streamId?username=$_username&password=$_password&type=$extension';
-    
-    // Önce XC style URL'i dene, çalışmazsa legacy URL'e geri dön
-    try {
-      final response = await http.head(Uri.parse(xcStyleUrl));
+    // Önbellekte bu tür için çalışan bir format var mı?
+    if (_formatCache.containsKey(streamType)) {
+      final formatTemplate = _formatCache[streamType]!;
+      final url = _applyTemplate(formatTemplate, streamId, streamType);
+      
+      // Önbellekteki format çalışıyor mu kontrol et (opsiyonel)
+      try {
+        final response = await http.head(Uri.parse(url))
+            .timeout(const Duration(seconds: 3));
       if (response.statusCode == 200) {
-        return xcStyleUrl;
+          print('Debug - Önbellekteki format çalışıyor: $url');
+          return url; // Önbellekteki format çalışıyor
+        }
+      } catch (_) {
+        // Önbellekteki format artık çalışmıyor, önbelleği temizle
+        print('Debug - Önbellekteki format çalışmıyor, temizleniyor');
+        _formatCache.remove(streamType);
       }
-    } catch (_) {
-      // XC style URL çalışmadı, legacy URL'i dene
     }
     
-    try {
-      final response = await http.head(Uri.parse(legacyStyleUrl));
-      if (response.statusCode == 200) {
-        return legacyStyleUrl;
-      }
-    } catch (_) {
-      // Legacy URL de çalışmadı
+    // İçerik türü için olası formatları al
+    final templates = _formatTemplates[streamType] ?? [];
+    if (templates.isEmpty) {
+      // Bilinmeyen içerik türü için varsayılan format
+      final defaultUrl = '{server}/{type}/{user}/{pass}/{id}'
+          .replaceAll('{server}', _serverUrl!)
+          .replaceAll('{type}', streamType)
+          .replaceAll('{user}', _username!)
+          .replaceAll('{pass}', _password!)
+          .replaceAll('{id}', streamId);
+      
+      print('Debug - Bilinmeyen içerik türü için varsayılan URL: $defaultUrl');
+      return defaultUrl;
     }
     
-    // Hiçbir URL çalışmadıysa, varsayılan olarak XC style URL'i döndür
-    return xcStyleUrl;
+    print('Debug - ${templates.length} format deneniyor...');
+    
+    // Her formatı dene
+    for (final template in templates) {
+      final url = _applyTemplate(template, streamId, streamType);
+      
+      try {
+        print('Debug - Deneniyor: $url');
+        final response = await http.head(Uri.parse(url))
+            .timeout(const Duration(seconds: 3));
+        
+      if (response.statusCode == 200) {
+          // Çalışan formatı önbelleğe al
+          _formatCache[streamType] = template;
+          print('Debug - Çalışan format bulundu ve önbelleğe alındı: $url');
+          return url;
+        }
+      } catch (e) {
+        // Bu format çalışmadı, bir sonrakini dene
+        print('Debug - Format çalışmadı: $url, Hata: $e');
+        continue;
+      }
+    }
+    
+    // Hiçbir format çalışmadıysa, varsayılan formatı döndür
+    final defaultTemplate = templates.first;
+    final defaultUrl = _applyTemplate(defaultTemplate, streamId, streamType);
+    print('Debug - Hiçbir format çalışmadı, varsayılan döndürülüyor: $defaultUrl');
+    return defaultUrl;
+  }
+  
+  // Format şablonunu uygula
+  String _applyTemplate(String template, String streamId, String streamType) {
+    return template
+        .replaceAll('{server}', _serverUrl!)
+        .replaceAll('{user}', _username!)
+        .replaceAll('{pass}', _password!)
+        .replaceAll('{id}', streamId)
+        .replaceAll('{type}', streamType);
   }
 
   // TV Kanallarını getir
   Future<List<Map<String, dynamic>>> getLiveTV() async {
     try {
-      // Önce TV kategorilerini al
-      final liveCategories = await getLiveCategories();
-      Map<String, String> categoryMap = {};
-      
-      // Kategori ID'lerini ve adlarını eşleştir
-      for (var category in liveCategories) {
-        categoryMap[category['category_id'].toString()] = category['category_name'];
-      }
-      
-      // Şimdi kanalları al
       final uri = Uri.parse('$_serverUrl/player_api.php').replace(
         queryParameters: {
           'username': _username,
@@ -237,19 +382,11 @@ class IptvService {
         },
       );
 
-      final response = await http.get(uri);
+      final response = await http.get(uri).timeout(const Duration(seconds: 30));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        final result = List<Map<String, dynamic>>.from(data);
-        
-        // Kategori adlarını ekle
-        for (var item in result) {
-          final categoryId = item['category_id']?.toString() ?? '';
-          item['category_name'] = categoryMap[categoryId] ?? 'Diğer';
-        }
-        
-        return result;
+        return List<Map<String, dynamic>>.from(data);
       }
       return [];
     } catch (e) {
@@ -261,16 +398,7 @@ class IptvService {
   // Filmleri getir
   Future<List<Map<String, dynamic>>> getMovies() async {
     try {
-      // Önce film kategorilerini al
-      final movieCategories = await getMovieCategories();
-      Map<String, String> categoryMap = {};
-      
-      // Kategori ID'lerini ve adlarını eşleştir
-      for (var category in movieCategories) {
-        categoryMap[category['category_id'].toString()] = category['category_name'];
-      }
-      
-      // Şimdi filmleri al
+      print('Debug - Getting all movies');
       final uri = Uri.parse('$_serverUrl/player_api.php').replace(
         queryParameters: {
           'username': _username,
@@ -279,44 +407,20 @@ class IptvService {
         },
       );
 
-      final response = await http.get(uri);
+      print('Debug - Request URL: ${uri.toString()}');
+      final response = await http.get(uri).timeout(const Duration(seconds: 30));
+      print('Debug - Response status: ${response.statusCode}');
+      print('Debug - Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        final result = List<Map<String, dynamic>>.from(data);
-        
-        // Debug: Tüm kategori ID'lerini ve adlarını yazdır
-        print('Film kategorileri:');
-        categoryMap.forEach((id, name) {
-          print('ID: $id, Name: $name');
-        });
-        
-        // Kategori adlarını ekle
-        for (var item in result) {
-          final categoryId = item['category_id']?.toString() ?? '';
-          item['category_name'] = categoryMap[categoryId] ?? 'Diğer';
+        if (data is List) {
+          return data.map((item) => Map<String, dynamic>.from(item)).toList();
         }
-        
-        // Debug: Kaç film var
-        print('Toplam film sayısı: ${result.length}');
-        
-        // Debug: Kategorilere göre film sayıları
-        Map<String, int> categoryCounts = {};
-        for (var item in result) {
-          final categoryName = item['category_name'] ?? 'Diğer';
-          categoryCounts[categoryName] = (categoryCounts[categoryName] ?? 0) + 1;
-        }
-        
-        print('Kategorilere göre film sayıları:');
-        categoryCounts.forEach((category, count) {
-          print('$category: $count film');
-        });
-        
-        return result;
       }
       return [];
     } catch (e) {
-      print('Get Movies error: $e');
+      print('Debug - Get Movies error: $e');
       return [];
     }
   }
@@ -324,16 +428,7 @@ class IptvService {
   // Dizileri getir
   Future<List<Map<String, dynamic>>> getSeries() async {
     try {
-      // Önce dizi kategorilerini al
-      final seriesCategories = await getSeriesCategories();
-      Map<String, String> categoryMap = {};
-      
-      // Kategori ID'lerini ve adlarını eşleştir
-      for (var category in seriesCategories) {
-        categoryMap[category['category_id'].toString()] = category['category_name'];
-      }
-      
-      // Şimdi dizileri al
+      print('Debug - Getting all series');
       final uri = Uri.parse('$_serverUrl/player_api.php').replace(
         queryParameters: {
           'username': _username,
@@ -342,29 +437,345 @@ class IptvService {
         },
       );
 
-      final response = await http.get(uri);
+      print('Debug - Request URL: ${uri.toString()}');
+      final response = await http.get(uri).timeout(const Duration(seconds: 30));
+      print('Debug - Response status: ${response.statusCode}');
+      print('Debug - Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        final result = List<Map<String, dynamic>>.from(data);
-        
-        // Kategori adlarını ekle
-        for (var item in result) {
-          final categoryId = item['category_id']?.toString() ?? '';
-          item['category_name'] = categoryMap[categoryId] ?? 'Diğer';
+        if (data is List) {
+          return data.map((item) => Map<String, dynamic>.from(item)).toList();
         }
-        
-        return result;
       }
       return [];
     } catch (e) {
-      print('Get Series error: $e');
+      print('Debug - Get Series error: $e');
       return [];
     }
   }
 
-  // Diğer IPTV işlemleri için metodlar buraya eklenecek
-  // - Kanal listesi alma
-  // - Yayın akışı URL'i alma
-  // - EPG (Program rehberi) alma vb.
+  // Dizi detaylarını getir
+  Future<Map<String, dynamic>> getSeriesInfo(String seriesId) async {
+    try {
+      if (!_isLoggedIn) {
+        throw Exception('User not logged in');
+      }
+
+      final response = await _dio.get(
+        '$_serverUrl/player_api.php',
+        queryParameters: {
+          'username': _username,
+          'password': _password,
+          'action': 'get_series_info',
+          'series_id': seriesId,
+        },
+      );
+
+      debugPrint('Debug - Response status: ${response.statusCode}');
+      debugPrint('Debug - HAM API YANITI:');
+      debugPrint(response.data.toString());
+
+      if (response.statusCode == 200) {
+        final data = response.data;
+        
+        // Tüm dizi bilgilerini koru
+        final seriesInfo = {
+          'name': data['info']['name'] ?? '',
+          'plot': data['info']['plot'] ?? '',
+          'cast': data['info']['cast'] ?? '',
+          'director': data['info']['director'] ?? '',
+          'genre': data['info']['genre'] ?? '',
+          'releaseDate': data['info']['releaseDate'] ?? '',
+          'rating': data['info']['rating'] ?? '',
+          'rating_5based': data['info']['rating_5based'] ?? 0,
+          'cover': data['info']['cover'] ?? '',
+          'banner': data['info']['banner'] ?? '',
+          'backdrop_path': data['info']['backdrop_path'] ?? [],
+          'youtube_trailer': data['info']['youtube_trailer'] ?? '',
+          'episode_run_time': data['info']['episode_run_time'] ?? '',
+          'seasons': data['seasons'] ?? [],
+          'episodes': data['episodes'] ?? {},
+        };
+
+        debugPrint('Debug - İşlenmiş dizi bilgileri:');
+        debugPrint(seriesInfo.toString());
+
+        return seriesInfo;
+      } else {
+        throw Exception('Failed to get series info: ${response.statusCode}');
+      }
+    } catch (e) {
+      debugPrint('Error getting series info: $e');
+      rethrow;
+    }
+  }
+
+  // Film detaylarını getir
+  Future<MovieDetails> getMovieInfo(String movieId) async {
+    final url = Uri.parse('$_serverUrl/player_api.php');
+    final response = await http.get(url.replace(queryParameters: {
+      'username': _username,
+      'password': _password,
+      'action': 'get_vod_info',
+      'vod_id': movieId,
+    }));
+
+    if (response.statusCode == 200) {
+      final data = json.decode(response.body);
+      return MovieDetails.fromJson(data);
+    } else {
+      throw Exception('Film bilgileri alınamadı');
+    }
+  }
+
+  // Dizi bölümlerini getir
+  Future<Map<String, List<Map<String, dynamic>>>> getSeriesEpisodes(String seriesId) async {
+    try {
+      print('Debug - Getting episodes for series ID: $seriesId');
+      final uri = Uri.parse('$_serverUrl/player_api.php').replace(
+        queryParameters: {
+          'username': _username,
+          'password': _password,
+          'action': 'get_series_info',
+          'series_id': seriesId,
+        },
+      );
+
+      print('Debug - Request URL: ${uri.toString().replaceAll(_password!, '****')}');
+      final response = await http.get(uri).timeout(const Duration(seconds: 30));
+      print('Debug - Response status: ${response.statusCode}');
+      print('Debug - Response headers: ${response.headers}');
+      print('Debug - Response body: ${response.body}');
+
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        if (data is Map<String, dynamic> && data['episodes'] != null) {
+          final episodes = data['episodes'] as Map<String, dynamic>;
+          final result = <String, List<Map<String, dynamic>>>{};
+          
+          episodes.forEach((season, seasonEpisodes) {
+            if (seasonEpisodes is List) {
+              final episodeList = seasonEpisodes.map((episode) {
+                if (episode is Map<String, dynamic>) {
+                  return {
+                    'id': episode['id']?.toString() ?? '',
+                    'title': episode['title'] ?? '',
+                    'container_extension': episode['container_extension'] ?? '',
+                    'info': episode['info'] ?? {},
+                    'season': season,
+                  };
+                }
+                return <String, dynamic>{};
+              }).toList();
+              
+              result[season] = episodeList;
+            }
+          });
+          
+          return result;
+        }
+      }
+      return {};
+    } catch (e) {
+      print('Get Series Episodes error: $e');
+      return {};
+    }
+  }
+
+  // Tüm arama geçmişini temizle
+  Future<void> clearSearchHistory() async {
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_searchHistoryKey);
+  }
+
+  // Arama yap
+  Future<SearchResults> search(String query, {
+    bool includeChannels = true,
+    bool includeMovies = true,
+    bool includeSeries = true,
+    String sortOrder = 'asc', // 'asc' veya 'desc'
+  }) async {
+    if (_serverUrl == null || _username == null || _password == null) {
+      throw Exception('IptvService not initialized');
+    }
+
+    if (query.trim().isEmpty) {
+      return SearchResults(channels: [], movies: [], series: []);
+    }
+
+    final normalizedQuery = query.toLowerCase().trim();
+    
+    List<Map<String, dynamic>> channelResults = [];
+    List<Map<String, dynamic>> movieResults = [];
+    List<Map<String, dynamic>> seriesResults = [];
+
+    try {
+      // Kanalları ara
+      if (includeChannels) {
+        final allChannels = await getLiveTV();
+        channelResults = allChannels.where((channel) {
+          final name = (channel['name'] ?? '').toLowerCase();
+          final description = (channel['description'] ?? '').toLowerCase();
+          return name.contains(normalizedQuery) || description.contains(normalizedQuery);
+        }).toList();
+      }
+
+      // Filmleri ara
+      if (includeMovies) {
+        final allMovies = await getMovies();
+        movieResults = allMovies.where((movie) {
+          final name = (movie['name'] ?? '').toLowerCase();
+          final description = (movie['description'] ?? '').toLowerCase();
+          final plot = (movie['plot'] ?? '').toLowerCase();
+          final cast = (movie['cast'] ?? '').toLowerCase();
+          final director = (movie['director'] ?? '').toLowerCase();
+          final genre = (movie['genre'] ?? '').toLowerCase();
+          
+          return name.contains(normalizedQuery) || 
+                 description.contains(normalizedQuery) || 
+                 plot.contains(normalizedQuery) ||
+                 cast.contains(normalizedQuery) ||
+                 director.contains(normalizedQuery) ||
+                 genre.contains(normalizedQuery);
+        }).toList();
+      }
+
+      // Dizileri ara
+      if (includeSeries) {
+        final allSeries = await getSeries();
+        seriesResults = allSeries.where((series) {
+          final name = (series['name'] ?? '').toLowerCase();
+          final description = (series['description'] ?? '').toLowerCase();
+          final plot = (series['plot'] ?? '').toLowerCase();
+          final cast = (series['cast'] ?? '').toLowerCase();
+          final director = (series['director'] ?? '').toLowerCase();
+          final genre = (series['genre'] ?? '').toLowerCase();
+          
+          return name.contains(normalizedQuery) || 
+                 description.contains(normalizedQuery) || 
+                 plot.contains(normalizedQuery) ||
+                 cast.contains(normalizedQuery) ||
+                 director.contains(normalizedQuery) ||
+                 genre.contains(normalizedQuery);
+        }).toList();
+      }
+
+      // Sonuçları sırala
+      final sortFunction = (Map<String, dynamic> a, Map<String, dynamic> b) {
+        final nameA = (a['name'] ?? '').toLowerCase();
+        final nameB = (b['name'] ?? '').toLowerCase();
+        return sortOrder == 'asc' 
+            ? nameA.compareTo(nameB) 
+            : nameB.compareTo(nameA);
+      };
+
+      channelResults.sort((a, b) => sortFunction(a, b));
+      movieResults.sort((a, b) => sortFunction(a, b));
+      seriesResults.sort((a, b) => sortFunction(a, b));
+
+      return SearchResults(
+        channels: channelResults,
+        movies: movieResults,
+        series: seriesResults,
+      );
+    } catch (e) {
+      print('Search error: $e');
+      return SearchResults(channels: [], movies: [], series: []);
+    }
+  }
+
+  // Tarih sıralaması için yardımcı metod
+  List<Map<String, dynamic>> _sortByDate(List<Map<String, dynamic>> items, bool ascending) {
+    items.sort((a, b) {
+      // Önce tarih alanını bul (added, releaseDate, last_modified vb.)
+      String? dateFieldA;
+      String? dateFieldB;
+      
+      if (a.containsKey('added')) {
+        dateFieldA = a['added'];
+        dateFieldB = b['added'];
+      } else if (a.containsKey('releaseDate')) {
+        dateFieldA = a['releaseDate'];
+        dateFieldB = b['releaseDate'];
+      } else if (a.containsKey('last_modified')) {
+        dateFieldA = a['last_modified'];
+        dateFieldB = b['last_modified'];
+      } else {
+        // Tarih alanı bulunamadı, isme göre sırala
+        final nameA = (a['name'] ?? '').toLowerCase();
+        final nameB = (b['name'] ?? '').toLowerCase();
+        return ascending ? nameA.compareTo(nameB) : nameB.compareTo(nameA);
+      }
+      
+      // Tarih alanları null ise isme göre sırala
+      if (dateFieldA == null || dateFieldB == null) {
+        final nameA = (a['name'] ?? '').toLowerCase();
+        final nameB = (b['name'] ?? '').toLowerCase();
+        return ascending ? nameA.compareTo(nameB) : nameB.compareTo(nameA);
+      }
+      
+      // Tarihleri karşılaştır
+      try {
+        final dateA = DateTime.parse(dateFieldA);
+        final dateB = DateTime.parse(dateFieldB);
+        return ascending ? dateA.compareTo(dateB) : dateB.compareTo(dateA);
+      } catch (e) {
+        // Tarih ayrıştırılamadı, isme göre sırala
+        final nameA = (a['name'] ?? '').toLowerCase();
+        final nameB = (b['name'] ?? '').toLowerCase();
+        return ascending ? nameA.compareTo(nameB) : nameB.compareTo(nameA);
+      }
+    });
+    
+    return items;
+  }
+  
+  // Sonuçları tarihe göre sırala
+  Future<SearchResults> sortResultsByDate(SearchResults results, bool ascending) async {
+    return SearchResults(
+      channels: _sortByDate(results.channels, ascending),
+      movies: _sortByDate(results.movies, ascending),
+      series: _sortByDate(results.series, ascending),
+    );
+  }
+
+  // Sonuçları isme göre sırala
+  Future<SearchResults> sortResultsByName(SearchResults results, bool ascending) async {
+    final sortFunction = (Map<String, dynamic> a, Map<String, dynamic> b) {
+      final nameA = (a['name'] ?? '').toLowerCase();
+      final nameB = (b['name'] ?? '').toLowerCase();
+      return ascending ? nameA.compareTo(nameB) : nameB.compareTo(nameA);
+    };
+
+    final channels = List<Map<String, dynamic>>.from(results.channels);
+    final movies = List<Map<String, dynamic>>.from(results.movies);
+    final series = List<Map<String, dynamic>>.from(results.series);
+
+    channels.sort((a, b) => sortFunction(a, b));
+    movies.sort((a, b) => sortFunction(a, b));
+    series.sort((a, b) => sortFunction(a, b));
+
+    return SearchResults(
+      channels: channels,
+      movies: movies,
+      series: series,
+    );
+  }
+}
+
+// Arama sonuçları için model sınıfı
+class SearchResults {
+  final List<Map<String, dynamic>> channels;
+  final List<Map<String, dynamic>> movies;
+  final List<Map<String, dynamic>> series;
+
+  SearchResults({
+    required this.channels,
+    required this.movies,
+    required this.series,
+  });
+
+  bool get isEmpty => channels.isEmpty && movies.isEmpty && series.isEmpty;
+  int get totalCount => channels.length + movies.length + series.length;
 } 

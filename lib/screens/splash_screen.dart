@@ -25,10 +25,11 @@ class _SplashScreenState extends State<SplashScreen> {
     
     final storageService = StorageService();
     final hasCredentials = await storageService.hasCredentials();
-    
+
     if (hasCredentials) {
       // Kayıtlı giriş bilgileri var, otomatik giriş yap
       final credentials = await storageService.getCredentials();
+      
       final iptvService = IptvService();
       
       await iptvService.initialize(
@@ -44,20 +45,38 @@ class _SplashScreenState extends State<SplashScreen> {
         // Giriş başarılı, ana ekrana git
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const HomeScreen()),
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) => const HomeScreen(),
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              return FadeTransition(opacity: animation, child: child);
+            },
+            transitionDuration: const Duration(milliseconds: 100),
+          ),
         );
       } else if (mounted) {
         // Giriş başarısız, login ekranına git
         Navigator.pushReplacement(
           context,
-          MaterialPageRoute(builder: (context) => const LoginScreen()),
+          PageRouteBuilder(
+            pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
+            transitionsBuilder: (context, animation, secondaryAnimation, child) {
+              return FadeTransition(opacity: animation, child: child);
+            },
+            transitionDuration: const Duration(milliseconds: 100),
+          ),
         );
       }
     } else if (mounted) {
       // Kayıtlı giriş bilgileri yok, login ekranına git
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        PageRouteBuilder(
+          pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
+          transitionsBuilder: (context, animation, secondaryAnimation, child) {
+            return FadeTransition(opacity: animation, child: child);
+          },
+          transitionDuration: const Duration(milliseconds: 100),
+        ),
       );
     }
   }
