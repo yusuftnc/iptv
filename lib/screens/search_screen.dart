@@ -5,6 +5,7 @@ import '../services/iptv_service.dart';
 import '../services/storage_service.dart';
 import 'player_screen.dart';
 import 'series_detail_screen.dart';
+import 'movie_details_screen.dart';
 
 class SearchScreen extends StatefulWidget {
   const SearchScreen({super.key});
@@ -17,33 +18,34 @@ class _SearchScreenState extends State<SearchScreen> {
   final TextEditingController _searchController = TextEditingController();
   final IptvService _iptvService = IptvService();
   final StorageService _storageService = StorageService();
-  
+
   bool _isLoading = false;
   String _errorMessage = '';
-  SearchResults _searchResults = SearchResults(channels: [], movies: [], series: []);
+  SearchResults _searchResults =
+      SearchResults(channels: [], movies: [], series: []);
   List<String> _searchHistory = [];
-  
+
   // Filtreler
   bool _includeChannels = true;
   bool _includeMovies = true;
   bool _includeSeries = true;
-  
+
   // Sıralama
   String _sortType = 'name'; // 'name' veya 'date'
   bool _sortAscending = true;
-  
+
   @override
   void initState() {
     super.initState();
     _loadSearchHistory();
   }
-  
+
   @override
   void dispose() {
     _searchController.dispose();
     super.dispose();
   }
-  
+
   Future<void> _loadSearchHistory() async {
     try {
       final history = await _storageService.getSearchHistory();
@@ -54,18 +56,18 @@ class _SearchScreenState extends State<SearchScreen> {
       print('Arama geçmişi yüklenirken hata: $e');
     }
   }
-  
+
   Future<void> _performSearch(String query) async {
     if (query.trim().isEmpty) {
       return;
     }
-    
+
     try {
       setState(() {
         _isLoading = true;
         _errorMessage = '';
       });
-      
+
       // Arama yap
       final results = await _iptvService.search(
         query,
@@ -74,19 +76,21 @@ class _SearchScreenState extends State<SearchScreen> {
         includeSeries: _includeSeries,
         sortOrder: _sortAscending ? 'asc' : 'desc',
       );
-      
+
       // Sonuçları sırala
       SearchResults sortedResults;
       if (_sortType == 'date') {
-        sortedResults = await _iptvService.sortResultsByDate(results, _sortAscending);
+        sortedResults =
+            await _iptvService.sortResultsByDate(results, _sortAscending);
       } else {
-        sortedResults = await _iptvService.sortResultsByName(results, _sortAscending);
+        sortedResults =
+            await _iptvService.sortResultsByName(results, _sortAscending);
       }
-      
+
       // Arama geçmişine ekle
       await _storageService.addToSearchHistory(query);
       await _loadSearchHistory();
-      
+
       setState(() {
         _searchResults = sortedResults;
         _isLoading = false;
@@ -98,48 +102,95 @@ class _SearchScreenState extends State<SearchScreen> {
       });
     }
   }
-  
+
   void _removeFromHistory(String query) async {
     await _storageService.removeFromSearchHistory(query);
     await _loadSearchHistory();
   }
-  
+
   void _clearSearchHistory() async {
     await _storageService.clearSearchHistory();
     await _loadSearchHistory();
   }
-  
-  void _playContent(ContentItem contentItem) {
-    Navigator.push(
-      context,
-      MaterialPageRoute(
-        builder: (context) => PlayerScreen(
-          contentId: contentItem.id,
-          streamUrl: contentItem.streamUrl ?? '',
-          contentType: contentItem.streamType ?? 'movie',
-        ),
-      ),
-    );
+
+  Future<void> _playContent(ContentItem contentItem) async {
+    try {
+      final type = contentItem.streamType ?? 'live';
+
+      if (type == 'series') {
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SeriesDetailScreen(seriesItem: contentItem),
+          ),
+        );
+        return;
+      }
+
+      // Stream URL'i elde et
+      String streamUrl = contentItem.streamUrl ?? '';
+      if (streamUrl.isEmpty) {
+        final fetchedUrl = await _iptvService.getStreamUrl(
+          streamId: contentItem.id,
+          streamType: type,
+        );
+        streamUrl = fetchedUrl ?? '';
+      }
+
+      if (type == 'movie') {
+        final movieDetails = await _iptvService.getMovieInfo(contentItem.id);
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MovieDetailsScreen(
+              contentId: contentItem.id,
+              streamUrl: streamUrl,
+              movieDetails: movieDetails,
+            ),
+          ),
+        );
+      } else {
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PlayerScreen(
+              contentId: contentItem.id,
+              streamUrl: streamUrl,
+              contentType: type,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('İçerik yüklenirken hata oluştu: ${e.toString()}')),
+      );
+    }
   }
-  
+
   void _updateSort(String sortType, bool ascending) {
     setState(() {
       _sortType = sortType;
       _sortAscending = ascending;
     });
-    
+
     if (_searchController.text.isNotEmpty) {
       _performSearch(_searchController.text);
     }
   }
-  
+
   void _updateFilters({bool? channels, bool? movies, bool? series}) {
     setState(() {
       if (channels != null) _includeChannels = channels;
       if (movies != null) _includeMovies = movies;
       if (series != null) _includeSeries = series;
     });
-    
+
     if (_searchController.text.isNotEmpty) {
       _performSearch(_searchController.text);
     }
@@ -171,7 +222,8 @@ class _SearchScreenState extends State<SearchScreen> {
                         onPressed: () {
                           _searchController.clear();
                           setState(() {
-                            _searchResults = SearchResults(channels: [], movies: [], series: []);
+                            _searchResults = SearchResults(
+                                channels: [], movies: [], series: []);
                           });
                         },
                       )
@@ -193,7 +245,7 @@ class _SearchScreenState extends State<SearchScreen> {
               textInputAction: TextInputAction.search,
             ),
           ),
-          
+
           // Filtre ve sıralama çubuğu
           Padding(
             padding: const EdgeInsets.symmetric(horizontal: 8.0),
@@ -215,7 +267,9 @@ class _SearchScreenState extends State<SearchScreen> {
                           selectedColor: Colors.blue,
                           checkmarkColor: Colors.white,
                           labelStyle: TextStyle(
-                            color: _includeChannels ? Colors.white : Colors.grey[300],
+                            color: _includeChannels
+                                ? Colors.white
+                                : Colors.grey[300],
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -229,7 +283,9 @@ class _SearchScreenState extends State<SearchScreen> {
                           selectedColor: Colors.blue,
                           checkmarkColor: Colors.white,
                           labelStyle: TextStyle(
-                            color: _includeMovies ? Colors.white : Colors.grey[300],
+                            color: _includeMovies
+                                ? Colors.white
+                                : Colors.grey[300],
                           ),
                         ),
                         const SizedBox(width: 8),
@@ -243,14 +299,16 @@ class _SearchScreenState extends State<SearchScreen> {
                           selectedColor: Colors.blue,
                           checkmarkColor: Colors.white,
                           labelStyle: TextStyle(
-                            color: _includeSeries ? Colors.white : Colors.grey[300],
+                            color: _includeSeries
+                                ? Colors.white
+                                : Colors.grey[300],
                           ),
                         ),
                       ],
                     ),
                   ),
                 ),
-                
+
                 // Sıralama butonu
                 PopupMenuButton<Map<String, dynamic>>(
                   icon: const Icon(Icons.sort, color: Colors.blue),
@@ -265,13 +323,16 @@ class _SearchScreenState extends State<SearchScreen> {
                         children: [
                           Icon(
                             Icons.arrow_upward,
-                            color: _sortType == 'name' && _sortAscending ? Colors.blue : Colors.grey,
+                            color: _sortType == 'name' && _sortAscending
+                                ? Colors.blue
+                                : Colors.grey,
                             size: 18,
                           ),
                           const SizedBox(width: 8),
                           const Text('A-Z'),
                           if (_sortType == 'name' && _sortAscending)
-                            const Icon(Icons.check, color: Colors.blue, size: 18),
+                            const Icon(Icons.check,
+                                color: Colors.blue, size: 18),
                         ],
                       ),
                     ),
@@ -281,13 +342,16 @@ class _SearchScreenState extends State<SearchScreen> {
                         children: [
                           Icon(
                             Icons.arrow_downward,
-                            color: _sortType == 'name' && !_sortAscending ? Colors.blue : Colors.grey,
+                            color: _sortType == 'name' && !_sortAscending
+                                ? Colors.blue
+                                : Colors.grey,
                             size: 18,
                           ),
                           const SizedBox(width: 8),
                           const Text('Z-A'),
                           if (_sortType == 'name' && !_sortAscending)
-                            const Icon(Icons.check, color: Colors.blue, size: 18),
+                            const Icon(Icons.check,
+                                color: Colors.blue, size: 18),
                         ],
                       ),
                     ),
@@ -298,13 +362,16 @@ class _SearchScreenState extends State<SearchScreen> {
                         children: [
                           Icon(
                             Icons.calendar_today,
-                            color: _sortType == 'date' && !_sortAscending ? Colors.blue : Colors.grey,
+                            color: _sortType == 'date' && !_sortAscending
+                                ? Colors.blue
+                                : Colors.grey,
                             size: 18,
                           ),
                           const SizedBox(width: 8),
                           const Text('Yeniden Eskiye'),
                           if (_sortType == 'date' && !_sortAscending)
-                            const Icon(Icons.check, color: Colors.blue, size: 18),
+                            const Icon(Icons.check,
+                                color: Colors.blue, size: 18),
                         ],
                       ),
                     ),
@@ -314,13 +381,16 @@ class _SearchScreenState extends State<SearchScreen> {
                         children: [
                           Icon(
                             Icons.calendar_today,
-                            color: _sortType == 'date' && _sortAscending ? Colors.blue : Colors.grey,
+                            color: _sortType == 'date' && _sortAscending
+                                ? Colors.blue
+                                : Colors.grey,
                             size: 18,
                           ),
                           const SizedBox(width: 8),
                           const Text('Eskiden Yeniye'),
                           if (_sortType == 'date' && _sortAscending)
-                            const Icon(Icons.check, color: Colors.blue, size: 18),
+                            const Icon(Icons.check,
+                                color: Colors.blue, size: 18),
                         ],
                       ),
                     ),
@@ -329,7 +399,7 @@ class _SearchScreenState extends State<SearchScreen> {
               ],
             ),
           ),
-          
+
           // İçerik alanı
           Expanded(
             child: _isLoading
@@ -356,7 +426,8 @@ class _SearchScreenState extends State<SearchScreen> {
                             ),
                             const SizedBox(height: 24),
                             ElevatedButton(
-                              onPressed: () => _performSearch(_searchController.text),
+                              onPressed: () =>
+                                  _performSearch(_searchController.text),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: Colors.blue,
                               ),
@@ -373,7 +444,7 @@ class _SearchScreenState extends State<SearchScreen> {
       ),
     );
   }
-  
+
   Widget _buildSearchHistory() {
     if (_searchHistory.isEmpty) {
       return const Center(
@@ -383,7 +454,7 @@ class _SearchScreenState extends State<SearchScreen> {
         ),
       );
     }
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -442,7 +513,7 @@ class _SearchScreenState extends State<SearchScreen> {
       ],
     );
   }
-  
+
   Widget _buildSearchResults() {
     if (_searchResults.isEmpty) {
       return Center(
@@ -464,7 +535,7 @@ class _SearchScreenState extends State<SearchScreen> {
         ),
       );
     }
-    
+
     return ListView(
       children: [
         // Kanallar
@@ -472,13 +543,13 @@ class _SearchScreenState extends State<SearchScreen> {
           _buildSectionHeader('Kanallar', _searchResults.channels.length),
           _buildChannelsList(_searchResults.channels),
         ],
-        
+
         // Filmler
         if (_includeMovies && _searchResults.movies.isNotEmpty) ...[
           _buildSectionHeader('Filmler', _searchResults.movies.length),
           _buildContentGrid(_searchResults.movies, 'movie'),
         ],
-        
+
         // Diziler
         if (_includeSeries && _searchResults.series.isNotEmpty) ...[
           _buildSectionHeader('Diziler', _searchResults.series.length),
@@ -487,7 +558,7 @@ class _SearchScreenState extends State<SearchScreen> {
       ],
     );
   }
-  
+
   Widget _buildSectionHeader(String title, int count) {
     return Padding(
       padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
@@ -520,7 +591,7 @@ class _SearchScreenState extends State<SearchScreen> {
       ),
     );
   }
-  
+
   Widget _buildChannelsList(List<Map<String, dynamic>> channels) {
     return ListView.separated(
       shrinkWrap: true,
@@ -535,7 +606,8 @@ class _SearchScreenState extends State<SearchScreen> {
       itemBuilder: (context, index) {
         final channel = channels[index];
         return ListTile(
-          leading: channel['stream_icon'] != null && channel['stream_icon'].isNotEmpty
+          leading: channel['stream_icon'] != null &&
+                  channel['stream_icon'].isNotEmpty
               ? CachedNetworkImage(
                   imageUrl: channel['stream_icon'],
                   width: 40,
@@ -575,15 +647,16 @@ class _SearchScreenState extends State<SearchScreen> {
       },
     );
   }
-  
-  Widget _buildContentGrid(List<Map<String, dynamic>> items, String contentType) {
+
+  Widget _buildContentGrid(
+      List<Map<String, dynamic>> items, String contentType) {
     // GridView için sabit değerler
     const crossAxisCount = 3;
     const childAspectRatio = 0.7;
     const crossAxisSpacing = 8.0;
     const mainAxisSpacing = 8.0;
     const padding = EdgeInsets.all(8.0);
-    
+
     return GridView.builder(
       shrinkWrap: true,
       physics: const NeverScrollableScrollPhysics(),
@@ -597,16 +670,15 @@ class _SearchScreenState extends State<SearchScreen> {
       itemCount: items.length,
       itemBuilder: (context, index) {
         final item = items[index];
-        final iconUrl = contentType == 'series'
-            ? item['cover']
-            : item['stream_icon'];
+        final iconUrl =
+            contentType == 'series' ? item['cover'] : item['stream_icon'];
         final name = item['name'] ?? 'İsimsiz İçerik';
-        
+
         // İkon widget'ını önceden oluştur
-        final iconWidget = contentType == 'movie' 
+        final iconWidget = contentType == 'movie'
             ? const Icon(Icons.movie, size: 30, color: Colors.white)
             : const Icon(Icons.video_library, size: 30, color: Colors.white);
-        
+
         return Card(
           clipBehavior: Clip.antiAlias,
           color: Colors.grey[900],
@@ -657,4 +729,4 @@ class _SearchScreenState extends State<SearchScreen> {
       },
     );
   }
-} 
+}
