@@ -215,34 +215,7 @@ class _HomeScreenState extends State<HomeScreen> {
               },
               tooltip: 'Ara',
             ),
-            IconButton(
-              icon: const Icon(Icons.favorite),
-              onPressed: () {
-                Navigator.push(
-                  context,
-                  PageRouteBuilder(
-                    pageBuilder: (context, animation, secondaryAnimation) =>
-                        const FavoritesScreen(),
-                    transitionsBuilder:
-                        (context, animation, secondaryAnimation, child) {
-                      return FadeTransition(opacity: animation, child: child);
-                    },
-                    transitionDuration: const Duration(milliseconds: 100),
-                  ),
-                );
-              },
-              tooltip: 'Favoriler',
-            ),
-            IconButton(
-              icon: const Icon(Icons.refresh),
-              onPressed: _loadContent,
-              tooltip: 'Yenile',
-            ),
-            IconButton(
-              icon: const Icon(Icons.logout),
-              onPressed: () => _showLogoutDialog(),
-              tooltip: 'Çıkış Yap',
-            ),
+            // Refresh butonu menüye taşındı
           ],
         ),
         drawer: Drawer(
@@ -325,6 +298,21 @@ class _HomeScreenState extends State<HomeScreen> {
                         builder: (context) => const WatchHistoryScreen(),
                       ),
                     );
+                  },
+                ),
+                // Yenile
+                ListTile(
+                  title: const Text(
+                    'Yenile',
+                    style: TextStyle(color: Colors.white),
+                  ),
+                  leading: const Icon(
+                    Icons.refresh,
+                    color: Colors.white,
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    _loadContent();
                   },
                 ),
                 const Divider(color: Colors.grey),
