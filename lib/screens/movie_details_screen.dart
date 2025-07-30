@@ -52,7 +52,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
       );
       await _databaseService.addFavorite(contentItem);
     }
-    
+
     setState(() {
       _isFavorite = !_isFavorite;
     });
@@ -79,27 +79,24 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // Cover Image
+            // Cover Image (tam görüntü, kırpmasız)
             Container(
-              height: 300,
               width: double.infinity,
-              decoration: BoxDecoration(
-                color: Colors.black,
-              ),
+              color: Colors.black,
               child: CachedNetworkImage(
                 imageUrl: widget.movieDetails.coverUrl,
-                fit: BoxFit.cover,
-                placeholder: (context, url) => const Center(
-                  child: CircularProgressIndicator(),
+                fit: BoxFit.contain, // kırpmadan göster
+                placeholder: (context, url) => const SizedBox(
+                  height: 250,
+                  child: Center(child: CircularProgressIndicator()),
                 ),
-                errorWidget: (context, url, error) => const Icon(
-                  Icons.error,
-                  color: Colors.red,
-                  size: 50,
+                errorWidget: (context, url, error) => const SizedBox(
+                  height: 250,
+                  child: Icon(Icons.error, color: Colors.red, size: 50),
                 ),
               ),
             ),
-            
+
             // Movie Details
             Padding(
               padding: const EdgeInsets.all(16.0),
@@ -116,31 +113,32 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                     ),
                   ),
                   const SizedBox(height: 8),
-                  
+
                   // Director
                   if (widget.movieDetails.director.isNotEmpty) ...[
                     _buildDetailRow('Yönetmen', widget.movieDetails.director),
                     const SizedBox(height: 8),
                   ],
-                  
+
                   // Release Date
                   if (widget.movieDetails.releaseDate.isNotEmpty) ...[
-                    _buildDetailRow('Yayın Tarihi', widget.movieDetails.releaseDate),
+                    _buildDetailRow(
+                        'Yayın Tarihi', widget.movieDetails.releaseDate),
                     const SizedBox(height: 8),
                   ],
-                  
+
                   // Duration
                   if (widget.movieDetails.duration.isNotEmpty) ...[
                     _buildDetailRow('Süre', widget.movieDetails.duration),
                     const SizedBox(height: 8),
                   ],
-                  
+
                   // Cast
                   if (widget.movieDetails.cast.isNotEmpty) ...[
                     _buildDetailRow('Oyuncular', widget.movieDetails.cast),
                     const SizedBox(height: 8),
                   ],
-                  
+
                   // Description
                   if (widget.movieDetails.description.isNotEmpty) ...[
                     const Text(
@@ -212,4 +210,4 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
       ],
     );
   }
-} 
+}

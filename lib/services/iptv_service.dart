@@ -15,13 +15,13 @@ class IptvService {
   Map<String, dynamic>? _userInfo;
   bool _isLoggedIn = false;
   late final Dio _dio;
-  
+
   // Arama geçmişi için anahtar
   static const String _searchHistoryKey = 'search_history';
 
   // Her içerik türü için çalışan formatı önbellekte tut
   final Map<String, String> _formatCache = {};
-  
+
   // Her içerik türü için olası formatlar
   final Map<String, List<String>> _formatTemplates = {
     'live': [
@@ -88,7 +88,7 @@ class IptvService {
     _username = username;
     _password = password;
     _serverUrl = 'http://$_host:$_port';
-    
+
     // Önbelleği temizle (yeni giriş yapıldığında)
     _formatCache.clear();
   }
@@ -98,11 +98,16 @@ class IptvService {
       final liveCategories = await getLiveCategories();
       final movieCategories = await getMovieCategories();
       final seriesCategories = await getSeriesCategories();
-      
+
       _categoryNames.clear();
-      
-      for (var category in [...liveCategories, ...movieCategories, ...seriesCategories]) {
-        _categoryNames[category['category_id'].toString()] = category['category_name'];
+
+      for (var category in [
+        ...liveCategories,
+        ...movieCategories,
+        ...seriesCategories
+      ]) {
+        _categoryNames[category['category_id'].toString()] =
+            category['category_name'];
       }
     } catch (e) {
       print('Load categories error: $e');
@@ -222,12 +227,14 @@ class IptvService {
       print('Debug - Login DioException: ${e.message}');
       print('Debug - DioException type: ${e.type}');
       print('Debug - DioException response: ${e.response?.data}');
-      
+
       if (e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.receiveTimeout) {
-        throw Exception('Bağlantı zaman aşımına uğradı. Lütfen internet bağlantınızı kontrol edin.');
+        throw Exception(
+            'Bağlantı zaman aşımına uğradı. Lütfen internet bağlantınızı kontrol edin.');
       } else if (e.type == DioExceptionType.connectionError) {
-        throw Exception('Sunucuya bağlanılamıyor. Lütfen internet bağlantınızı kontrol edin.');
+        throw Exception(
+            'Sunucuya bağlanılamıyor. Lütfen internet bağlantınızı kontrol edin.');
       }
       throw Exception('Login failed: ${e.message}');
     } catch (e) {
@@ -243,7 +250,8 @@ class IptvService {
 
     try {
       final response = await http.get(
-        Uri.parse('$_serverUrl/player_api.php?username=$_username&password=$_password&action=get_live_categories'),
+        Uri.parse(
+            '$_serverUrl/player_api.php?username=$_username&password=$_password&action=get_live_categories'),
         headers: {'Content-Type': 'application/json'},
       ).timeout(const Duration(seconds: 10));
 
@@ -294,27 +302,22 @@ class IptvService {
     if (_serverUrl == null || _username == null || _password == null) {
       throw Exception('IptvService not initialized');
     }
-    
+
     // Önbellekte bu tür için çalışan bir format var mı?
     if (_formatCache.containsKey(streamType)) {
       final formatTemplate = _formatCache[streamType]!;
       final url = _applyTemplate(formatTemplate, streamId, streamType);
-      
-      // Önbellekteki format çalışıyor mu kontrol et (opsiyonel)
-      try {
-        final response = await http.head(Uri.parse(url))
-            .timeout(const Duration(seconds: 3));
-      if (response.statusCode == 200) {
-          print('Debug - Önbellekteki format çalışıyor: $url');
-          return url; // Önbellekteki format çalışıyor
-        }
-      } catch (_) {
-        // Önbellekteki format artık çalışmıyor, önbelleği temizle
-        print('Debug - Önbellekteki format çalışmıyor, temizleniyor');
+
+      final ok = await _urlWorks(url);
+      if (ok) {
+        debugPrint('Debug - Önbellekteki format çalışıyor: $url');
+        return url;
+      } else {
+        debugPrint('Debug - Önbellekteki format çalışmıyor, temizleniyor');
         _formatCache.remove(streamType);
       }
     }
-    
+
     // İçerik türü için olası formatları al
     final templates = _formatTemplates[streamType] ?? [];
     if (templates.isEmpty) {
@@ -325,42 +328,36 @@ class IptvService {
           .replaceAll('{user}', _username!)
           .replaceAll('{pass}', _password!)
           .replaceAll('{id}', streamId);
-      
+
       print('Debug - Bilinmeyen içerik türü için varsayılan URL: $defaultUrl');
       return defaultUrl;
     }
-    
+
     print('Debug - ${templates.length} format deneniyor...');
-    
+
     // Her formatı dene
     for (final template in templates) {
       final url = _applyTemplate(template, streamId, streamType);
-      
-      try {
-        print('Debug - Deneniyor: $url');
-        final response = await http.head(Uri.parse(url))
-            .timeout(const Duration(seconds: 3));
-        
-      if (response.statusCode == 200) {
-          // Çalışan formatı önbelleğe al
-          _formatCache[streamType] = template;
-          print('Debug - Çalışan format bulundu ve önbelleğe alındı: $url');
-          return url;
-        }
-      } catch (e) {
-        // Bu format çalışmadı, bir sonrakini dene
-        print('Debug - Format çalışmadı: $url, Hata: $e');
-        continue;
+
+      debugPrint('Debug - Deneniyor: $url');
+      final ok = await _urlWorks(url);
+      if (ok) {
+        _formatCache[streamType] = template; // çalışanı kaydet
+        debugPrint('Debug - Çalışan format bulundu ve önbelleğe alındı: $url');
+        return url;
+      } else {
+        debugPrint('Debug - Format çalışmadı: $url');
       }
     }
-    
+
     // Hiçbir format çalışmadıysa, varsayılan formatı döndür
     final defaultTemplate = templates.first;
     final defaultUrl = _applyTemplate(defaultTemplate, streamId, streamType);
-    print('Debug - Hiçbir format çalışmadı, varsayılan döndürülüyor: $defaultUrl');
+    print(
+        'Debug - Hiçbir format çalışmadı, varsayılan döndürülüyor: $defaultUrl');
     return defaultUrl;
   }
-  
+
   // Format şablonunu uygula
   String _applyTemplate(String template, String streamId, String streamType) {
     return template
@@ -369,6 +366,21 @@ class IptvService {
         .replaceAll('{pass}', _password!)
         .replaceAll('{id}', streamId)
         .replaceAll('{type}', streamType);
+  }
+
+  // URL'in gerçekten çalışıp çalışmadığını küçük bir GET (Range: 0-0) isteğiyle kontrol et
+  Future<bool> _urlWorks(String url) async {
+    try {
+      final response = await http.get(
+        Uri.parse(url),
+        headers: const {'Range': 'bytes=0-0'}, // sadece ilk bayt
+      ).timeout(const Duration(seconds: 3));
+
+      // Çoğu sunucu 200 (OK) ya da 206 (Partial Content) döndürür
+      return response.statusCode == 200 || response.statusCode == 206;
+    } catch (_) {
+      return false;
+    }
   }
 
   // TV Kanallarını getir
@@ -478,7 +490,7 @@ class IptvService {
 
       if (response.statusCode == 200) {
         final data = response.data;
-        
+
         // Tüm dizi bilgilerini koru
         final seriesInfo = {
           'name': data['info']['name'] ?? '',
@@ -530,7 +542,8 @@ class IptvService {
   }
 
   // Dizi bölümlerini getir
-  Future<Map<String, List<Map<String, dynamic>>>> getSeriesEpisodes(String seriesId) async {
+  Future<Map<String, List<Map<String, dynamic>>>> getSeriesEpisodes(
+      String seriesId) async {
     try {
       print('Debug - Getting episodes for series ID: $seriesId');
       final uri = Uri.parse('$_serverUrl/player_api.php').replace(
@@ -542,7 +555,8 @@ class IptvService {
         },
       );
 
-      print('Debug - Request URL: ${uri.toString().replaceAll(_password!, '****')}');
+      print(
+          'Debug - Request URL: ${uri.toString().replaceAll(_password!, '****')}');
       final response = await http.get(uri).timeout(const Duration(seconds: 30));
       print('Debug - Response status: ${response.statusCode}');
       print('Debug - Response headers: ${response.headers}');
@@ -553,7 +567,7 @@ class IptvService {
         if (data is Map<String, dynamic> && data['episodes'] != null) {
           final episodes = data['episodes'] as Map<String, dynamic>;
           final result = <String, List<Map<String, dynamic>>>{};
-          
+
           episodes.forEach((season, seasonEpisodes) {
             if (seasonEpisodes is List) {
               final episodeList = seasonEpisodes.map((episode) {
@@ -568,11 +582,11 @@ class IptvService {
                 }
                 return <String, dynamic>{};
               }).toList();
-              
+
               result[season] = episodeList;
             }
           });
-          
+
           return result;
         }
       }
@@ -590,7 +604,8 @@ class IptvService {
   }
 
   // Arama yap
-  Future<SearchResults> search(String query, {
+  Future<SearchResults> search(
+    String query, {
     bool includeChannels = true,
     bool includeMovies = true,
     bool includeSeries = true,
@@ -605,7 +620,7 @@ class IptvService {
     }
 
     final normalizedQuery = query.toLowerCase().trim();
-    
+
     List<Map<String, dynamic>> channelResults = [];
     List<Map<String, dynamic>> movieResults = [];
     List<Map<String, dynamic>> seriesResults = [];
@@ -617,7 +632,8 @@ class IptvService {
         channelResults = allChannels.where((channel) {
           final name = (channel['name'] ?? '').toLowerCase();
           final description = (channel['description'] ?? '').toLowerCase();
-          return name.contains(normalizedQuery) || description.contains(normalizedQuery);
+          return name.contains(normalizedQuery) ||
+              description.contains(normalizedQuery);
         }).toList();
       }
 
@@ -631,13 +647,13 @@ class IptvService {
           final cast = (movie['cast'] ?? '').toLowerCase();
           final director = (movie['director'] ?? '').toLowerCase();
           final genre = (movie['genre'] ?? '').toLowerCase();
-          
-          return name.contains(normalizedQuery) || 
-                 description.contains(normalizedQuery) || 
-                 plot.contains(normalizedQuery) ||
-                 cast.contains(normalizedQuery) ||
-                 director.contains(normalizedQuery) ||
-                 genre.contains(normalizedQuery);
+
+          return name.contains(normalizedQuery) ||
+              description.contains(normalizedQuery) ||
+              plot.contains(normalizedQuery) ||
+              cast.contains(normalizedQuery) ||
+              director.contains(normalizedQuery) ||
+              genre.contains(normalizedQuery);
         }).toList();
       }
 
@@ -651,13 +667,13 @@ class IptvService {
           final cast = (series['cast'] ?? '').toLowerCase();
           final director = (series['director'] ?? '').toLowerCase();
           final genre = (series['genre'] ?? '').toLowerCase();
-          
-          return name.contains(normalizedQuery) || 
-                 description.contains(normalizedQuery) || 
-                 plot.contains(normalizedQuery) ||
-                 cast.contains(normalizedQuery) ||
-                 director.contains(normalizedQuery) ||
-                 genre.contains(normalizedQuery);
+
+          return name.contains(normalizedQuery) ||
+              description.contains(normalizedQuery) ||
+              plot.contains(normalizedQuery) ||
+              cast.contains(normalizedQuery) ||
+              director.contains(normalizedQuery) ||
+              genre.contains(normalizedQuery);
         }).toList();
       }
 
@@ -665,8 +681,8 @@ class IptvService {
       final sortFunction = (Map<String, dynamic> a, Map<String, dynamic> b) {
         final nameA = (a['name'] ?? '').toLowerCase();
         final nameB = (b['name'] ?? '').toLowerCase();
-        return sortOrder == 'asc' 
-            ? nameA.compareTo(nameB) 
+        return sortOrder == 'asc'
+            ? nameA.compareTo(nameB)
             : nameB.compareTo(nameA);
       };
 
@@ -686,12 +702,13 @@ class IptvService {
   }
 
   // Tarih sıralaması için yardımcı metod
-  List<Map<String, dynamic>> _sortByDate(List<Map<String, dynamic>> items, bool ascending) {
+  List<Map<String, dynamic>> _sortByDate(
+      List<Map<String, dynamic>> items, bool ascending) {
     items.sort((a, b) {
       // Önce tarih alanını bul (added, releaseDate, last_modified vb.)
       String? dateFieldA;
       String? dateFieldB;
-      
+
       if (a.containsKey('added')) {
         dateFieldA = a['added'];
         dateFieldB = b['added'];
@@ -707,14 +724,14 @@ class IptvService {
         final nameB = (b['name'] ?? '').toLowerCase();
         return ascending ? nameA.compareTo(nameB) : nameB.compareTo(nameA);
       }
-      
+
       // Tarih alanları null ise isme göre sırala
       if (dateFieldA == null || dateFieldB == null) {
         final nameA = (a['name'] ?? '').toLowerCase();
         final nameB = (b['name'] ?? '').toLowerCase();
         return ascending ? nameA.compareTo(nameB) : nameB.compareTo(nameA);
       }
-      
+
       // Tarihleri karşılaştır
       try {
         final dateA = DateTime.parse(dateFieldA);
@@ -727,12 +744,13 @@ class IptvService {
         return ascending ? nameA.compareTo(nameB) : nameB.compareTo(nameA);
       }
     });
-    
+
     return items;
   }
-  
+
   // Sonuçları tarihe göre sırala
-  Future<SearchResults> sortResultsByDate(SearchResults results, bool ascending) async {
+  Future<SearchResults> sortResultsByDate(
+      SearchResults results, bool ascending) async {
     return SearchResults(
       channels: _sortByDate(results.channels, ascending),
       movies: _sortByDate(results.movies, ascending),
@@ -741,7 +759,8 @@ class IptvService {
   }
 
   // Sonuçları isme göre sırala
-  Future<SearchResults> sortResultsByName(SearchResults results, bool ascending) async {
+  Future<SearchResults> sortResultsByName(
+      SearchResults results, bool ascending) async {
     final sortFunction = (Map<String, dynamic> a, Map<String, dynamic> b) {
       final nameA = (a['name'] ?? '').toLowerCase();
       final nameB = (b['name'] ?? '').toLowerCase();
@@ -762,6 +781,61 @@ class IptvService {
       series: series,
     );
   }
+
+  // Yardımcı: Tarih alanını (added/last_modified/releaseDate) Unix time olarak döndür
+  int _parseTimestamp(dynamic value) {
+    if (value == null) return 0;
+    try {
+      return int.parse(value.toString());
+    } catch (_) {
+      try {
+        return DateTime.parse(value.toString()).millisecondsSinceEpoch ~/ 1000;
+      } catch (_) {
+        return 0;
+      }
+    }
+  }
+
+  // Yardımcı: Listeyi eklenme zamanına göre (desc) sırala
+  List<Map<String, dynamic>> _sortByAddedDesc(List<Map<String, dynamic>> list) {
+    list.sort((a, b) {
+      final tsB =
+          _parseTimestamp(b['added'] ?? b['last_modified'] ?? b['releaseDate']);
+      final tsA =
+          _parseTimestamp(a['added'] ?? a['last_modified'] ?? a['releaseDate']);
+      return tsB.compareTo(tsA);
+    });
+    return list;
+  }
+
+  // En yeni filmleri getir
+  Future<List<Map<String, dynamic>>> getLatestMovies({int limit = 25}) async {
+    final movies = await getMovies();
+    final sorted = _sortByAddedDesc(movies);
+    final latest = sorted.take(limit).toList();
+
+    debugPrint('--- Son $limit Film ---');
+    for (final item in latest) {
+      debugPrint(
+          '${item['name']} | added: ${item['added']} | last_modified: ${item['last_modified']} | releaseDate: ${item['releaseDate'] ?? item['releasedate']}');
+    }
+
+    return latest;
+  }
+
+  // En yeni dizileri getir
+  Future<List<Map<String, dynamic>>> getLatestSeries({int limit = 25}) async {
+    final seriesList = await getSeries();
+    final sorted = _sortByAddedDesc(seriesList);
+    return sorted.take(limit).toList();
+  }
+
+  // En yeni kanalları getir
+  Future<List<Map<String, dynamic>>> getLatestChannels({int limit = 10}) async {
+    final channels = await getLiveTV();
+    final sorted = _sortByAddedDesc(channels);
+    return sorted.take(limit).toList();
+  }
 }
 
 // Arama sonuçları için model sınıfı
@@ -778,4 +852,4 @@ class SearchResults {
 
   bool get isEmpty => channels.isEmpty && movies.isEmpty && series.isEmpty;
   int get totalCount => channels.length + movies.length + series.length;
-} 
+}

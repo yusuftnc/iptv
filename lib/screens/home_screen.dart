@@ -26,17 +26,21 @@ class _HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 0;
   bool _isLoading = true;
   String _errorMessage = '';
-  
+
   // Kategoriler ve içerikler
   List<Map<String, dynamic>> _liveCategories = [];
   List<Map<String, dynamic>> _movieCategories = [];
   List<Map<String, dynamic>> _seriesCategories = [];
-  
+
   // Seçilen kategori içerikleri
   List<Map<String, dynamic>> _selectedCategoryContent = [];
   String _selectedCategoryName = '';
   String _selectedCategoryId = '';
   String _currentContentType = 'live'; // 'live', 'movie', 'series'
+
+  List<Map<String, dynamic>> _latestMovies = [];
+  List<Map<String, dynamic>> _latestSeries = [];
+  List<Map<String, dynamic>> _latestChannels = [];
 
   @override
   void initState() {
@@ -53,7 +57,10 @@ class _HomeScreenState extends State<HomeScreen> {
 
       switch (_currentIndex) {
         case 0: // Yeniler
-          // Yeniler tabı için içerik yükleme
+          _latestMovies = await _iptvService.getLatestMovies(limit: 25);
+          _latestSeries = await _iptvService.getLatestSeries(limit: 25);
+          _latestChannels = await _iptvService.getLatestChannels(limit: 10);
+
           break;
         case 1: // TV Kanalları
           _currentContentType = 'live';
@@ -77,7 +84,7 @@ class _HomeScreenState extends State<HomeScreen> {
           });
           break;
       }
-      
+
       setState(() {
         _isLoading = false;
       });
@@ -88,8 +95,9 @@ class _HomeScreenState extends State<HomeScreen> {
       });
     }
   }
-  
-  Future<void> _loadCategoryContent(String categoryId, String categoryType) async {
+
+  Future<void> _loadCategoryContent(
+      String categoryId, String categoryType) async {
     try {
       setState(() {
         _isLoading = true;
@@ -97,27 +105,28 @@ class _HomeScreenState extends State<HomeScreen> {
       });
 
       List<Map<String, dynamic>> content = [];
-      
+
       switch (categoryType) {
         case 'live':
           content = await _iptvService.getChannels(categoryId);
           break;
         case 'movie':
           final allMovies = await _iptvService.getMovies();
-          content = allMovies.where((movie) => 
-            movie['category_id']?.toString() == categoryId
-          ).toList();
+          content = allMovies
+              .where((movie) => movie['category_id']?.toString() == categoryId)
+              .toList();
           break;
         case 'series':
           final allSeries = await _iptvService.getSeries();
-          content = allSeries.where((serie) => 
-            serie['category_id']?.toString() == categoryId
-          ).toList();
+          content = allSeries
+              .where((serie) => serie['category_id']?.toString() == categoryId)
+              .toList();
           break;
       }
 
-      print('Debug - Loaded content for category $categoryId: ${content.length} items');
-      
+      print(
+          'Debug - Loaded content for category $categoryId: ${content.length} items');
+
       if (mounted) {
         setState(() {
           _selectedCategoryContent = content;
@@ -138,7 +147,7 @@ class _HomeScreenState extends State<HomeScreen> {
   Future<void> _logout() async {
     final storageService = StorageService();
     await storageService.clearCredentials();
-    
+
     if (mounted) {
       Navigator.pushReplacement(
         context,
@@ -155,7 +164,7 @@ class _HomeScreenState extends State<HomeScreen> {
         if (didPop) {
           return;
         }
-        
+
         if (_selectedCategoryName.isNotEmpty) {
           // Eğer bir kategori içeriği görüntüleniyorsa, kategori listesine geri dön
           setState(() {
@@ -171,11 +180,11 @@ class _HomeScreenState extends State<HomeScreen> {
       child: Scaffold(
         backgroundColor: Colors.black,
         appBar: AppBar(
-          title: Text(_selectedCategoryName.isNotEmpty 
-            ? _selectedCategoryName 
-            : _getAppBarTitle()),
+          title: Text(_selectedCategoryName.isNotEmpty
+              ? _selectedCategoryName
+              : _getAppBarTitle()),
           backgroundColor: Colors.blue,
-          leading: _selectedCategoryName.isNotEmpty 
+          leading: _selectedCategoryName.isNotEmpty
               ? IconButton(
                   icon: const Icon(Icons.arrow_back),
                   onPressed: () {
@@ -185,7 +194,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       _selectedCategoryContent = [];
                     });
                   },
-                ) 
+                )
               : null,
           actions: [
             IconButton(
@@ -194,8 +203,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 Navigator.push(
                   context,
                   PageRouteBuilder(
-                    pageBuilder: (context, animation, secondaryAnimation) => const SearchScreen(),
-                    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                    pageBuilder: (context, animation, secondaryAnimation) =>
+                        const SearchScreen(),
+                    transitionsBuilder:
+                        (context, animation, secondaryAnimation, child) {
                       return FadeTransition(opacity: animation, child: child);
                     },
                     transitionDuration: const Duration(milliseconds: 100),
@@ -210,8 +221,10 @@ class _HomeScreenState extends State<HomeScreen> {
                 Navigator.push(
                   context,
                   PageRouteBuilder(
-                    pageBuilder: (context, animation, secondaryAnimation) => const FavoritesScreen(),
-                    transitionsBuilder: (context, animation, secondaryAnimation, child) {
+                    pageBuilder: (context, animation, secondaryAnimation) =>
+                        const FavoritesScreen(),
+                    transitionsBuilder:
+                        (context, animation, secondaryAnimation, child) {
                       return FadeTransition(opacity: animation, child: child);
                     },
                     transitionDuration: const Duration(milliseconds: 100),
@@ -436,21 +449,50 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Widget _buildNewContent() {
-    return const Center(
-      child: Text(
-        'Yakında burada yeni içerikler gösterilecek',
-        style: TextStyle(color: Colors.white),
-      ),
+    if (_latestMovies.isEmpty &&
+        _latestSeries.isEmpty &&
+        _latestChannels.isEmpty) {
+      return const Center(
+        child: Text(
+          'Yeni içerik bulunamadı',
+          style: TextStyle(color: Colors.white),
+        ),
+      );
+    }
+
+    return ListView(
+      children: [
+        if (_latestMovies.isNotEmpty) ...[
+          _buildSectionHeader('Son Eklenen Filmler', _latestMovies.length),
+          _buildContentGrid(_latestMovies, 'movie'),
+        ],
+        if (_latestSeries.isNotEmpty) ...[
+          _buildSectionHeader('Son Eklenen Diziler', _latestSeries.length),
+          _buildContentGrid(_latestSeries, 'series'),
+        ],
+        if (_latestChannels.isNotEmpty) ...[
+          _buildSectionHeader('Son Eklenen Kanallar', _latestChannels.length),
+          _buildChannelsList(_latestChannels),
+        ],
+      ],
     );
   }
 
   Widget _buildCategoryList() {
     return ListView.separated(
       padding: const EdgeInsets.symmetric(vertical: 8),
-      itemCount: _currentIndex == 1 ? _liveCategories.length : _currentIndex == 2 ? _movieCategories.length : _seriesCategories.length,
+      itemCount: _currentIndex == 1
+          ? _liveCategories.length
+          : _currentIndex == 2
+              ? _movieCategories.length
+              : _seriesCategories.length,
       separatorBuilder: (context, index) => const Divider(height: 1),
       itemBuilder: (context, index) {
-        final category = _currentIndex == 1 ? _liveCategories[index] : _currentIndex == 2 ? _movieCategories[index] : _seriesCategories[index];
+        final category = _currentIndex == 1
+            ? _liveCategories[index]
+            : _currentIndex == 2
+                ? _movieCategories[index]
+                : _seriesCategories[index];
         return ListTile(
           leading: Icon(
             _getCategoryIcon(category['category_name']),
@@ -464,9 +506,11 @@ class _HomeScreenState extends State<HomeScreen> {
             setState(() {
               _selectedCategoryId = category['category_id'].toString();
               _selectedCategoryName = category['category_name'];
-              _currentContentType = _currentIndex == 1 ? 'live' 
-                  : _currentIndex == 2 ? 'movie' 
-                  : 'series';
+              _currentContentType = _currentIndex == 1
+                  ? 'live'
+                  : _currentIndex == 2
+                      ? 'movie'
+                      : 'series';
             });
             _loadCategoryContent(
               category['category_id'].toString(),
@@ -509,7 +553,7 @@ class _HomeScreenState extends State<HomeScreen> {
       itemBuilder: (context, index) {
         final item = _selectedCategoryContent[index];
         final contentItem = ContentItem.fromJson(item, _currentContentType);
-        
+
         return RepaintBoundary(
           child: Card(
             clipBehavior: Clip.antiAlias,
@@ -518,11 +562,13 @@ class _HomeScreenState extends State<HomeScreen> {
                 try {
                   print('Debug - Content item: $item');
                   print('Debug - Current content type: $_currentContentType');
-                  final contentId = _currentContentType == 'live' ? item['stream_id'].toString() :
-                                  _currentContentType == 'movie' ? item['stream_id'].toString() :
-                                  item['series_id'].toString();
+                  final contentId = _currentContentType == 'live'
+                      ? item['stream_id'].toString()
+                      : _currentContentType == 'movie'
+                          ? item['stream_id'].toString()
+                          : item['series_id'].toString();
                   print('Debug - Content ID: $contentId');
-                  
+
                   if (_currentContentType == 'series') {
                     print('Debug - Series ID: ${item['series_id']}');
                     Navigator.push(
@@ -535,13 +581,13 @@ class _HomeScreenState extends State<HomeScreen> {
                     );
                     return;
                   }
-                  
+
                   String? streamUrl = await _iptvService.getStreamUrl(
                     streamId: contentId,
                     streamType: _currentContentType,
                   );
                   print('Debug - Stream URL: $streamUrl');
-                  
+
                   if (streamUrl != null && mounted) {
                     _playContent(contentId, streamUrl, _currentContentType);
                   } else if (mounted) {
@@ -567,13 +613,18 @@ class _HomeScreenState extends State<HomeScreen> {
               child: Stack(
                 fit: StackFit.expand,
                 children: [
-                  if (contentItem.streamIcon != null && contentItem.streamIcon!.isNotEmpty)
+                  if (contentItem.streamIcon != null &&
+                      contentItem.streamIcon!.isNotEmpty)
                     CachedNetworkImage(
                       imageUrl: contentItem.streamIcon!,
-                      fit: _currentContentType == 'live' ? BoxFit.contain : BoxFit.cover,
+                      fit: _currentContentType == 'live'
+                          ? BoxFit.contain
+                          : BoxFit.cover,
                       width: double.infinity,
                       height: double.infinity,
-                      alignment: _currentContentType == 'live' ? Alignment.center : Alignment.topCenter,
+                      alignment: _currentContentType == 'live'
+                          ? Alignment.center
+                          : Alignment.topCenter,
                       memCacheWidth: 300,
                       memCacheHeight: 450,
                       cacheKey: contentItem.streamIcon,
@@ -586,9 +637,11 @@ class _HomeScreenState extends State<HomeScreen> {
                       errorWidget: (context, url, error) => Container(
                         color: Colors.grey[900],
                         child: Icon(
-                          _currentContentType == 'live' ? Icons.tv
-                          : _currentContentType == 'movie' ? Icons.movie
-                          : Icons.video_library,
+                          _currentContentType == 'live'
+                              ? Icons.tv
+                              : _currentContentType == 'movie'
+                                  ? Icons.movie
+                                  : Icons.video_library,
                           size: 30,
                           color: Colors.white,
                         ),
@@ -598,9 +651,11 @@ class _HomeScreenState extends State<HomeScreen> {
                     Container(
                       color: Colors.grey[900],
                       child: Icon(
-                        _currentContentType == 'live' ? Icons.tv
-                        : _currentContentType == 'movie' ? Icons.movie
-                        : Icons.video_library,
+                        _currentContentType == 'live'
+                            ? Icons.tv
+                            : _currentContentType == 'movie'
+                                ? Icons.movie
+                                : Icons.video_library,
                         size: 30,
                         color: Colors.white,
                       ),
@@ -632,12 +687,13 @@ class _HomeScreenState extends State<HomeScreen> {
     );
   }
 
-  Future<void> _playContent(String contentId, String streamUrl, String contentType) async {
+  Future<void> _playContent(
+      String contentId, String streamUrl, String contentType) async {
     try {
       if (contentType == 'movie') {
         final movieDetails = await _iptvService.getMovieInfo(contentId);
         if (!mounted) return;
-        
+
         Navigator.push(
           context,
           MaterialPageRoute(
@@ -752,6 +808,225 @@ class _HomeScreenState extends State<HomeScreen> {
       return Icons.tv;
     }
   }
+
+  Widget _buildSectionHeader(String title, int count) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+      child: Row(
+        children: [
+          Text(
+            title,
+            style: const TextStyle(
+              color: Colors.white,
+              fontSize: 18,
+              fontWeight: FontWeight.bold,
+            ),
+          ),
+          const SizedBox(width: 8),
+          Container(
+            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+            decoration: BoxDecoration(
+              color: Colors.blue,
+              borderRadius: BorderRadius.circular(12),
+            ),
+            child: Text(
+              count.toString(),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildChannelsList(List<Map<String, dynamic>> channels) {
+    return ListView.separated(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      cacheExtent: 100.0,
+      itemCount: channels.length,
+      separatorBuilder: (context, index) => const Divider(
+        color: Colors.grey,
+        height: 1,
+        indent: 70,
+      ),
+      itemBuilder: (context, index) {
+        final channel = channels[index];
+        return ListTile(
+          leading: channel['stream_icon'] != null &&
+                  channel['stream_icon'].isNotEmpty
+              ? CachedNetworkImage(
+                  imageUrl: channel['stream_icon'],
+                  width: 40,
+                  height: 40,
+                  fit: BoxFit.cover,
+                  placeholder: (context, url) => Container(
+                    width: 40,
+                    height: 40,
+                    color: Colors.grey[800],
+                    child: const Icon(Icons.tv, color: Colors.white, size: 20),
+                  ),
+                  errorWidget: (context, url, error) => Container(
+                    width: 40,
+                    height: 40,
+                    color: Colors.grey[800],
+                    child: const Icon(Icons.tv, color: Colors.white, size: 20),
+                  ),
+                )
+              : Container(
+                  width: 40,
+                  height: 40,
+                  color: Colors.grey[800],
+                  child: const Icon(Icons.tv, color: Colors.white, size: 20),
+                ),
+          title: Text(
+            channel['name'] ?? 'İsimsiz Kanal',
+            style: const TextStyle(color: Colors.white),
+          ),
+          subtitle: channel['category_name'] != null
+              ? Text(
+                  channel['category_name'],
+                  style: TextStyle(color: Colors.grey[400]),
+                )
+              : null,
+          onTap: () => _openContent(ContentItem.fromJson(channel, 'live')),
+        );
+      },
+    );
+  }
+
+  Widget _buildContentGrid(
+      List<Map<String, dynamic>> items, String contentType) {
+    const crossAxisCount = 3;
+    const childAspectRatio = 0.7;
+    const crossAxisSpacing = 8.0;
+    const mainAxisSpacing = 8.0;
+    const padding = EdgeInsets.all(8.0);
+
+    return GridView.builder(
+      shrinkWrap: true,
+      physics: const NeverScrollableScrollPhysics(),
+      padding: padding,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: crossAxisCount,
+        childAspectRatio: childAspectRatio,
+        crossAxisSpacing: crossAxisSpacing,
+        mainAxisSpacing: mainAxisSpacing,
+      ),
+      itemCount: items.length,
+      itemBuilder: (context, index) {
+        final item = items[index];
+        final iconUrl =
+            contentType == 'series' ? item['cover'] : item['stream_icon'];
+        final name = item['name'] ?? 'İsimsiz İçerik';
+
+        final iconWidget = contentType == 'movie'
+            ? const Icon(Icons.movie, size: 30, color: Colors.white)
+            : const Icon(Icons.video_library, size: 30, color: Colors.white);
+
+        return Card(
+          clipBehavior: Clip.antiAlias,
+          color: Colors.grey[900],
+          child: InkWell(
+            onTap: () => _openContent(ContentItem.fromJson(item, contentType)),
+            child: Stack(
+              fit: StackFit.expand,
+              children: [
+                if (iconUrl != null && iconUrl.isNotEmpty)
+                  CachedNetworkImage(
+                    imageUrl: iconUrl,
+                    fit: BoxFit.cover,
+                    placeholder: (context, url) =>
+                        const Center(child: CircularProgressIndicator()),
+                    errorWidget: (context, url, error) =>
+                        Container(color: Colors.grey[800], child: iconWidget),
+                  )
+                else
+                  Container(color: Colors.grey[800], child: iconWidget),
+                Positioned(
+                  bottom: 0,
+                  left: 0,
+                  right: 0,
+                  child: Container(
+                    padding: const EdgeInsets.all(4),
+                    color: Colors.black54,
+                    child: Text(
+                      name,
+                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      maxLines: 2,
+                      overflow: TextOverflow.ellipsis,
+                    ),
+                  ),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
+
+  Future<void> _openContent(ContentItem contentItem) async {
+    try {
+      final type = contentItem.streamType ?? 'live';
+
+      if (type == 'series') {
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => SeriesDetailScreen(seriesItem: contentItem),
+          ),
+        );
+        return;
+      }
+
+      String streamUrl = contentItem.streamUrl ?? '';
+      if (streamUrl.isEmpty) {
+        final fetchedUrl = await _iptvService.getStreamUrl(
+          streamId: contentItem.id,
+          streamType: type,
+        );
+        streamUrl = fetchedUrl ?? '';
+      }
+
+      if (type == 'movie') {
+        final movieDetails = await _iptvService.getMovieInfo(contentItem.id);
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => MovieDetailsScreen(
+              contentId: contentItem.id,
+              streamUrl: streamUrl,
+              movieDetails: movieDetails,
+            ),
+          ),
+        );
+      } else {
+        if (!mounted) return;
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (context) => PlayerScreen(
+              contentId: contentItem.id,
+              streamUrl: streamUrl,
+              contentType: type,
+            ),
+          ),
+        );
+      }
+    } catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+            content: Text('İçerik yüklenirken hata oluştu: ${e.toString()}')),
+      );
+    }
+  }
 }
 
 // Kategori listesi öğeleri için özel widget
@@ -774,14 +1049,14 @@ class CategoryListItem extends StatelessWidget {
     const textColor = Colors.white;
     const arrowColor = Colors.blue;
     const arrowSize = 16.0;
-    
+
     // İçerik tipine göre ikon belirleme
-    final IconData categoryIcon = contentType == 'live' 
-        ? Icons.tv 
-        : contentType == 'movie' 
-            ? Icons.movie 
+    final IconData categoryIcon = contentType == 'live'
+        ? Icons.tv
+        : contentType == 'movie'
+            ? Icons.movie
             : Icons.video_library;
-    
+
     return ListTile(
       title: Text(
         category['category_name'] ?? 'İsimsiz Kategori',
@@ -799,4 +1074,4 @@ class CategoryListItem extends StatelessWidget {
       onTap: onTap,
     );
   }
-} 
+}
