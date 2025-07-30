@@ -60,22 +60,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
-    
-    // Tam ekran modu ayarla
+
+    // Tam ekran (landscape) modunu başlat ve kilidi açık (rotasyon kilitli)
     SystemChrome.setPreferredOrientations([
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-    
+
+    // Başlangıçta kilidi açık kabul et
+    _isFullScreen = true;
+
     // Önce izleme pozisyonunu kontrol et
     _checkWatchPosition().then((_) {
       // Sonra video oynatıcıyı başlat
       _initializePlayer();
-      
+
       // Favorilerde olup olmadığını kontrol et
       _checkIfFavorite();
-      
+
       // Kontrolleri göster
       _startHideControlsTimer();
     });
@@ -101,7 +104,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         streamType: widget.contentType,
       ));
     }
-    
+
     setState(() {
       _isFavorite = !_isFavorite;
     });
@@ -109,9 +112,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _addToWatchHistory() async {
     try {
-      print("Debug - İlk izleme pozisyonu kontrolü başlatılıyor: ${widget.contentId}");
+      print(
+          "Debug - İlk izleme pozisyonu kontrolü başlatılıyor: ${widget.contentId}");
       print("Debug - İzleme geçmişine ekleniyor: ${widget.contentId}");
-      
+
       // İlk olarak izleme geçmişine ekle
       await _databaseService.addToWatchHistory(ContentItem(
         id: widget.contentId,
@@ -119,9 +123,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
         streamUrl: widget.streamUrl,
         streamType: widget.contentType,
       ));
-      
+
       print("Debug - İzleme geçmişine eklendi");
-      
     } catch (e) {
       print("Debug - İzleme geçmişine eklenirken hata: $e");
     }
@@ -129,14 +132,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _updateWatchPosition() async {
     try {
-      if (_controller != null && 
-          _currentPosition.inSeconds > 0 && 
+      if (_controller != null &&
+          _currentPosition.inSeconds > 0 &&
           _totalDuration.inSeconds > 0 &&
           _currentPosition.inSeconds < _totalDuration.inSeconds) {
-        
-        print("Debug - İzleme pozisyonu güncelleniyor: ${_currentPosition.inSeconds} / ${_totalDuration.inSeconds}");
+        print(
+            "Debug - İzleme pozisyonu güncelleniyor: ${_currentPosition.inSeconds} / ${_totalDuration.inSeconds}");
         print("Debug - ContentItem ID: ${widget.contentId}");
-        
+
         final contentItem = ContentItem(
           id: widget.contentId,
           name: '',
@@ -145,16 +148,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
           position: _currentPosition.inSeconds,
           duration: _totalDuration.inSeconds,
         );
-        
+
         await _databaseService.addToWatchHistory(contentItem);
-        
+
         // Veritabanına kaydedilen pozisyonu doğrula
-        final savedPosition = await _databaseService.getWatchPosition(widget.contentId);
-        print("Debug - Kaydedilen pozisyon kontrolü: ${savedPosition?.position} / ${savedPosition?.duration}");
-        
+        final savedPosition =
+            await _databaseService.getWatchPosition(widget.contentId);
+        print(
+            "Debug - Kaydedilen pozisyon kontrolü: ${savedPosition?.position} / ${savedPosition?.duration}");
+
         print("Debug - İzleme pozisyonu güncellendi");
       } else {
-        print("Debug - İzleme pozisyonu güncellenemiyor: ${_controller != null ? 'Controller var' : 'Controller yok'}, Pozisyon: ${_currentPosition.inSeconds}");
+        print(
+            "Debug - İzleme pozisyonu güncellenemiyor: ${_controller != null ? 'Controller var' : 'Controller yok'}, Pozisyon: ${_currentPosition.inSeconds}");
       }
     } catch (e) {
       print("Debug - İzleme pozisyonu güncellenirken hata: $e");
@@ -165,20 +171,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _checkWatchPosition() async {
     try {
       print("Debug - İzleme pozisyonu kontrol ediliyor: ${widget.contentId}");
-      final watchHistory = await _databaseService.getWatchPosition(widget.contentId);
-      
-      print("Debug - Alınan izleme geçmişi: ${watchHistory?.position} / ${watchHistory?.duration}");
+      final watchHistory =
+          await _databaseService.getWatchPosition(widget.contentId);
+
+      print(
+          "Debug - Alınan izleme geçmişi: ${watchHistory?.position} / ${watchHistory?.duration}");
       print("Debug - İzleme geçmişi contentId: ${watchHistory?.contentId}");
       print("Debug - Current contentItem id: ${widget.contentId}");
-      
-      if (watchHistory != null && 
-          watchHistory.position != null && 
+
+      if (watchHistory != null &&
+          watchHistory.position != null &&
           watchHistory.position! > 10 &&
-          watchHistory.duration != null && 
+          watchHistory.duration != null &&
           watchHistory.position! < (watchHistory.duration! - 30)) {
-        
         print("Debug - İzleme pozisyonu bulundu, diyalog gösteriliyor");
-        
+
         if (mounted) {
           final result = await showDialog<bool>(
             context: context,
@@ -186,8 +193,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             builder: (context) => AlertDialog(
               title: const Text('Kaldığınız Yerden Devam Et'),
               content: Text(
-                'Bu içeriği daha önce ${_formatDuration(Duration(seconds: watchHistory.position!))} kadar izlediniz. Kaldığınız yerden devam etmek istiyor musunuz?'
-              ),
+                  'Bu içeriği daha önce ${_formatDuration(Duration(seconds: watchHistory.position!))} kadar izlediniz. Kaldığınız yerden devam etmek istiyor musunuz?'),
               actions: [
                 TextButton(
                   onPressed: () {
@@ -211,50 +217,57 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ],
             ),
           );
-          
+
           print("Debug - Kullanıcı tercihi: $result");
-          
+
           if (result == true && _controller != null) {
-            print("Debug - Video ${watchHistory.position!} saniyeye ilerletiliyor");
-            
+            print(
+                "Debug - Video ${watchHistory.position!} saniyeye ilerletiliyor");
+
             // Birden fazla kez seekTo dene (controller'ın tamamen hazır olması için)
             try {
-              await _controller!.seekTo(Duration(seconds: watchHistory.position!));
-              
+              await _controller!
+                  .seekTo(Duration(seconds: watchHistory.position!));
+
               // Kontrol etmek için 1 saniye sonra tekrar dene
               Future.delayed(const Duration(seconds: 1), () async {
                 if (_controller != null && mounted) {
                   final currentPos = _controller!.value.position.inSeconds;
-                  print("Debug - İlerleme sonrası pozisyon kontrolü: $currentPos");
-                  
+                  print(
+                      "Debug - İlerleme sonrası pozisyon kontrolü: $currentPos");
+
                   // Eğer pozisyon hala başlangıçtaysa tekrar dene
                   if (currentPos < 3) {
-                    print("Debug - Pozisyon doğru ayarlanmamış, tekrar deneniyor");
-                    await _controller!.seekTo(Duration(seconds: watchHistory.position!));
+                    print(
+                        "Debug - Pozisyon doğru ayarlanmamış, tekrar deneniyor");
+                    await _controller!
+                        .seekTo(Duration(seconds: watchHistory.position!));
                   }
                 }
               });
             } catch (e) {
               print("Debug - seekTo sırasında hata: $e");
-              
+
               // Diğer yöntemi dene
               Future.delayed(const Duration(seconds: 2), () async {
                 if (_controller != null && mounted) {
                   try {
                     print("Debug - Alternatif yöntemle ilerleme deneniyor");
-                    await _controller!.seekTo(Duration(seconds: watchHistory.position!));
+                    await _controller!
+                        .seekTo(Duration(seconds: watchHistory.position!));
                   } catch (e) {
                     print("Debug - Alternatif ilerleme sırasında hata: $e");
                   }
                 }
               });
             }
-            
+
             print("Debug - Video pozisyon ayarlaması tamamlandı");
           }
         }
       } else {
-        print("Debug - Devam etmek için uygun pozisyon bulunamadı veya izleme geçmişi yok");
+        print(
+            "Debug - Devam etmek için uygun pozisyon bulunamadı veya izleme geçmişi yok");
         if (watchHistory == null) {
           print("Debug - İzleme geçmişi bulunamadı");
         } else if (watchHistory.position == null) {
@@ -264,7 +277,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
         } else if (watchHistory.duration == null) {
           print("Debug - Video süresi null");
         } else if (watchHistory.position! >= (watchHistory.duration! - 30)) {
-          print("Debug - İzleme pozisyonu videonun sonuna çok yakın: ${watchHistory.position} / ${watchHistory.duration}");
+          print(
+              "Debug - İzleme pozisyonu videonun sonuna çok yakın: ${watchHistory.position} / ${watchHistory.duration}");
         }
       }
     } catch (e) {
@@ -283,7 +297,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
       // İçerik türüne göre stream URL'ini al
       String? streamUrl;
-      
+
       if (widget.streamUrl != null && widget.streamUrl.isNotEmpty) {
         // Eğer ContentItem'da zaten bir URL varsa, onu kullan
         streamUrl = widget.streamUrl;
@@ -291,7 +305,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       } else {
         // Yoksa, servis üzerinden URL'i al
         final streamType = widget.contentType ?? 'live';
-        
+
         // Eğer dizi bölümü ise, özel işlem yap
         if (streamType == 'series' && widget.contentId.isNotEmpty) {
           // Dizi bölüm ID'sini kullanarak stream URL'ini al
@@ -299,13 +313,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
             streamId: widget.contentId,
             streamType: 'series',
           );
-          
+
           // Eğer URL alınamazsa, alternatif formatları dene
           if (streamUrl == null || streamUrl.isEmpty) {
             final serverUrl = _iptvService.getServerUrl();
             final username = _iptvService.getUsername();
             final password = _iptvService.getPassword();
-            
+
             if (serverUrl != null && username != null && password != null) {
               // Farklı formatları dene
               final formats = [
@@ -318,7 +332,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 '$serverUrl/series/$username/$password/series/${widget.contentId}.ts',
                 '$serverUrl/series/$username/$password/series/${widget.contentId}.m3u8',
               ];
-              
+
               // İlk formatı kullan (daha sonra diğerlerini deneyebiliriz)
               streamUrl = formats.first;
               print('Debug - Alternatif URL kullanılıyor: $streamUrl');
@@ -331,10 +345,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
             streamType: streamType,
           );
         }
-        
+
         print('Debug - Servis üzerinden URL alındı: $streamUrl');
       }
-      
+
       print('Debug - Stream URL: $streamUrl');
       print('Debug - Content Type: ${widget.contentType}');
       print('Debug - Content ID: ${widget.contentId}');
@@ -344,18 +358,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
 
       // İlk önce izleme pozisyonunu al
-      print("Debug - Video yüklenmeden önce izleme pozisyonu kontrol ediliyor.");
-      final watchHistory = await _databaseService.getWatchPosition(widget.contentId);
-      print("Debug - İzleme geçmişi: ${watchHistory?.position} / ${watchHistory?.duration}");
-      
+      print(
+          "Debug - Video yüklenmeden önce izleme pozisyonu kontrol ediliyor.");
+      final watchHistory =
+          await _databaseService.getWatchPosition(widget.contentId);
+      print(
+          "Debug - İzleme geçmişi: ${watchHistory?.position} / ${watchHistory?.duration}");
+
       // İzleme pozisyonu uygun mu kontrol et
       bool shouldResume = false;
       int? resumePosition;
-      
-      if (watchHistory != null && 
-          watchHistory.position != null && 
+
+      if (watchHistory != null &&
+          watchHistory.position != null &&
           watchHistory.position! > 10 &&
-          watchHistory.duration != null && 
+          watchHistory.duration != null &&
           watchHistory.position! < (watchHistory.duration! - 30)) {
         shouldResume = true;
         resumePosition = watchHistory.position;
@@ -369,7 +386,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
       // Önceki controller'ı temizle
       await _controller?.dispose();
-      
+
       // Yeni controller oluştur
       final initialOptions = VlcPlayerOptions(
         advanced: VlcAdvancedOptions([
@@ -383,14 +400,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
           VlcVideoOptions.skipFrames(true),
         ]),
       );
-      
+
       print("Debug - VLC Player controller oluşturuluyor");
-      
+
       // Controller'ı eğer izleme pozisyonu varsa ve bu bir film/diziyse (live değilse)
       // autoPlay:false ile başlat, böylece ilk frame'de pozisyona atlaması daha kolay olur
       final isLiveContent = widget.contentType == 'live';
       final shouldAutoPlay = isLiveContent || !shouldResume;
-      
+
       _controller = VlcPlayerController.network(
         streamUrl,
         autoPlay: shouldAutoPlay,
@@ -403,13 +420,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // Controller hazır olduğunda çalışacak listener
       _controller!.addOnInitListener(() async {
         print("Debug - Video controller initialize oldu");
-        
+
         if (!shouldAutoPlay) {
-          // Eğer autoPlay false ise, video durmuş halde. 
+          // Eğer autoPlay false ise, video durmuş halde.
           // Pozisyonu ayarladıktan sonra oynatmaya başlayacağız
           print("Debug - Pozisyon ayarlanana kadar video duraklatıldı");
         }
-        
+
         // İzleme pozisyonuna gitmeyi daha sonra deneyelim,
         // controller tam olarak hazır olduğunda
         if (_shouldSeekToInitialPosition && _initialSeekPosition != null) {
@@ -420,16 +437,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
       // Video durumunu dinlemek için listener ekleniyor
       _controller!.addListener(() {
-        if (_controller!.value.isInitialized && 
-            _controller!.value.isPlaying && 
+        if (_controller!.value.isInitialized &&
+            _controller!.value.isPlaying &&
             _controller!.value.position.inSeconds > 0 &&
-            _shouldSeekToInitialPosition && 
+            _shouldSeekToInitialPosition &&
             _initialSeekPosition != null) {
-          
           // Video oynamaya başladığında ve henüz pozisyon ayarlanmadıysa
           // pozisyonu ayarlamayı deneyelim
           if (!_seekAttemptsStarted) {
-            print("Debug - Video oynamaya başladı, pozisyon ayarlamayı deneyeceğiz");
+            print(
+                "Debug - Video oynamaya başladı, pozisyon ayarlamayı deneyeceğiz");
             _startSeekAttempts(_initialSeekPosition!);
           }
         }
@@ -441,7 +458,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
       // İzleme geçmişine ekle (başlangıç kaydı)
       _addToWatchHistory();
-
     } catch (e) {
       print('Debug - Hata oluştu: $e');
       print('Debug - Hata türü: ${e.runtimeType}');
@@ -463,7 +479,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
     });
   }
-  
+
   void _toggleControls() {
     setState(() {
       _showControls = !_showControls;
@@ -472,7 +488,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
     });
   }
-  
+
   void _seekForward() {
     if (_controller != null) {
       final currentPos = _controller!.value.position.inSeconds;
@@ -480,7 +496,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _startHideControlsTimer();
     }
   }
-  
+
   void _seekBackward() {
     if (_controller != null) {
       final currentPos = _controller!.value.position.inSeconds;
@@ -488,7 +504,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _startHideControlsTimer();
     }
   }
-  
+
   void _setVolume(double value) {
     if (_controller != null) {
       setState(() {
@@ -499,7 +515,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _startHideControlsTimer();
     }
   }
-  
+
   void _toggleMute() {
     if (_controller != null) {
       setState(() {
@@ -516,7 +532,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _startHideControlsTimer();
     }
   }
-  
+
   void _loadSubtitles() async {
     try {
       // VLC Player'ın altyazı API'sini kullanarak mevcut altyazıları yükle
@@ -524,7 +540,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         // Not: Bu kısım VLC Player'ın API'sine bağlı olarak değişebilir
         // Şu anda flutter_vlc_player paketi doğrudan altyazı listesi almayı desteklemiyor
         // Bu nedenle bu kısım şimdilik simüle edilmiştir
-        
+
         // Gerçek uygulamada, altyazıları sunucudan veya video dosyasından yüklemeniz gerekebilir
         setState(() {
           _availableSubtitles = ['Türkçe', 'İngilizce', 'Kapalı'];
@@ -535,7 +551,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       print('Altyazılar yüklenirken hata: $e');
     }
   }
-  
+
   void _setSubtitle(String? subtitle) {
     if (_controller != null) {
       setState(() {
@@ -559,21 +575,24 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _startPositionUpdateTimer() {
     _positionUpdateTimer?.cancel();
-    _positionUpdateTimer = Timer.periodic(const Duration(milliseconds: 500), (timer) {
+    _positionUpdateTimer =
+        Timer.periodic(const Duration(milliseconds: 500), (timer) {
       if (_controller != null && mounted) {
         final position = _controller!.value.position;
         final duration = _controller!.value.duration;
-        
+
         // Pozisyon ve süre değerlerinin geçerli olduğundan emin ol
         if (position.inMilliseconds >= 0 && duration.inMilliseconds > 0) {
           setState(() {
             _currentPosition = position;
             _totalDuration = duration;
           });
-          
+
           // Her 5 saniyede bir ve pozisyon değiştiğinde kaydet
-          if ((position.inSeconds % 5 == 0 || 
-              (position.inSeconds - (_lastSavedPosition?.inSeconds ?? 0)).abs() >= 5) && 
+          if ((position.inSeconds % 5 == 0 ||
+                  (position.inSeconds - (_lastSavedPosition?.inSeconds ?? 0))
+                          .abs() >=
+                      5) &&
               position.inSeconds > 0) {
             _updateWatchPosition();
             _lastSavedPosition = position;
@@ -588,71 +607,79 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (_seekAttemptsStarted) {
       return; // Zaten başlatılmış
     }
-    
+
     _seekAttemptsStarted = true;
     _seekAttemptCount = 0;
-    
+
     // İlk deneme, controller başlatıldıktan hemen sonra
     _performSeekAttempt(position);
-    
+
     // Sonraki denemeleri zamanla gerçekleştir
     // 1, 2, 4, 8 saniye aralıklarla dene
     for (int i = 1; i <= 4; i++) {
       Future.delayed(Duration(seconds: i * i), () {
-        if (_controller != null && mounted && _seekAttemptCount < _maxSeekAttempts) {
+        if (_controller != null &&
+            mounted &&
+            _seekAttemptCount < _maxSeekAttempts) {
           _performSeekAttempt(position);
         }
       });
     }
   }
-  
+
   void _performSeekAttempt(int position) async {
     _seekAttemptCount++;
-    
+
     try {
       if (_controller == null || !mounted) {
-        print("Debug - Deneme $_seekAttemptCount: Controller yok veya widget artık mounted değil");
+        print(
+            "Debug - Deneme $_seekAttemptCount: Controller yok veya widget artık mounted değil");
         return;
       }
-      
+
       // Eğer oynatma henüz başlamamışsa başlat
       if (!_controller!.value.isPlaying && !_controller!.value.isBuffering) {
-        print("Debug - Deneme $_seekAttemptCount: Video oynamıyor, oynatmayı başlatıyorum");
+        print(
+            "Debug - Deneme $_seekAttemptCount: Video oynamıyor, oynatmayı başlatıyorum");
         await _controller!.play();
-        
+
         // Oynatmayı başlattıktan sonra kısa bir süre bekle ve pozisyonu ayarla
         await Future.delayed(const Duration(milliseconds: 500));
       }
-      
+
       final currentPos = _controller!.value.position.inSeconds;
-      
+
       // Eğer zaten istenen pozisyonda veya daha ilerideyse, işlem yapmaya gerek yok
       if (currentPos >= position - 5) {
-        print("Debug - Deneme $_seekAttemptCount: Zaten doğru pozisyona yakın (Şu anki: $currentPos, Hedef: $position)");
+        print(
+            "Debug - Deneme $_seekAttemptCount: Zaten doğru pozisyona yakın (Şu anki: $currentPos, Hedef: $position)");
         return;
       }
-      
-      print("Debug - Deneme $_seekAttemptCount: Video $position saniyeye ilerletiliyor (Şu anki: $currentPos)");
-      
+
+      print(
+          "Debug - Deneme $_seekAttemptCount: Video $position saniyeye ilerletiliyor (Şu anki: $currentPos)");
+
       // Önce videoyu duraklat
       await _controller!.pause();
-      
+
       // Pozisyonu ayarla
       await _controller!.seekTo(Duration(seconds: position));
-      
+
       // Kısa bir beklemeden sonra tekrar oynat
       await Future.delayed(const Duration(milliseconds: 300));
       await _controller!.play();
-      
+
       // Son pozisyonu kontrol et
       await Future.delayed(const Duration(milliseconds: 700));
       final newPos = _controller!.value.position.inSeconds;
-      print("Debug - Deneme $_seekAttemptCount: Pozisyon ayarlama sonrası: $newPos");
-      
+      print(
+          "Debug - Deneme $_seekAttemptCount: Pozisyon ayarlama sonrası: $newPos");
+
       // Eğer pozisyon değişmediyse, farklı bir yöntem dene (agresif yöntem)
       if (newPos < 3 || (newPos - currentPos).abs() < 3) {
-        print("Debug - Deneme $_seekAttemptCount: Pozisyon değişmedi, farklı yöntem deneniyor");
-        
+        print(
+            "Debug - Deneme $_seekAttemptCount: Pozisyon değişmedi, farklı yöntem deneniyor");
+
         // MediaPlayer'ı doğrudan al ve time ayarla (VLC Player native API)
         // Not: Bu yöntem Flutter VLC Player paketine bağlı olarak değişebilir
         // await _controller!.setTime(position * 1000); // milisaniye cinsinden
@@ -664,7 +691,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   void _videoListener() {
     if (!mounted) return;
-    
+
     final position = _controller?.value.position;
     if (position != null) {
       setState(() {
@@ -700,7 +727,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (_controller != null) {
           await _controller!.stop();
         }
-        
+
         // Video ekranından çıkarken normal ekran modunu geri yükle
         SystemChrome.setPreferredOrientations([
           DeviceOrientation.portraitUp,
@@ -759,7 +786,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
               onPressed: _initializePlayer,
               style: ElevatedButton.styleFrom(
                 backgroundColor: Colors.blue,
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               ),
               child: const Text('Tekrar Dene'),
             ),
@@ -797,7 +825,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
           ),
         ),
-        
+
         // Gelişmiş Kontroller
         _buildControls(),
       ],
@@ -814,17 +842,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
         ),
       );
     }
-    
+
     // Ekran yönlendirmesini al
     final orientation = MediaQuery.of(context).orientation;
-    
+
     // Sabit değerler
     const double controlPaddingHorizontal = 16;
     const double controlPaddingVertical = 8;
     const double iconSize = 48;
     const double playIconSize = 64;
     const double spacing = 32;
-    
+
     return GestureDetector(
       onTap: _toggleControls,
       behavior: HitTestBehavior.opaque,
@@ -836,15 +864,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
             // Üst kontrol çubuğu - oryantasyona göre farklı görünümler
             Container(
               padding: const EdgeInsets.symmetric(
-                horizontal: controlPaddingHorizontal, 
-                vertical: controlPaddingVertical
-              ),
+                  horizontal: controlPaddingHorizontal,
+                  vertical: controlPaddingVertical),
               color: Colors.black54,
               child: orientation == Orientation.portrait
                   ? _buildPortraitTopControls() // Dikey mod
                   : _buildLandscapeTopControls(), // Yatay mod
             ),
-            
+
             // Orta alan - İleri/geri sarma butonları
             Row(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -858,14 +885,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 IconButton(
                   iconSize: playIconSize,
                   icon: Icon(
-                    _controller != null && _controller!.value.isPlaying 
-                        ? Icons.pause_circle_filled 
+                    _controller != null && _controller!.value.isPlaying
+                        ? Icons.pause_circle_filled
                         : Icons.play_circle_filled,
                     color: Colors.white,
                   ),
                   onPressed: () {
                     if (_controller == null) return;
-                    
+
                     setState(() {
                       if (_controller!.value.isPlaying) {
                         _controller!.pause();
@@ -873,7 +900,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         _controller!.play();
                       }
                     });
-                    
+
                     _startHideControlsTimer();
                   },
                 ),
@@ -885,13 +912,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 ),
               ],
             ),
-            
+
             // Alt kontrol çubuğu - İlerleme çubuğu ve ses kontrolü
             Container(
               padding: const EdgeInsets.symmetric(
-                horizontal: controlPaddingHorizontal, 
-                vertical: controlPaddingVertical
-              ),
+                  horizontal: controlPaddingHorizontal,
+                  vertical: controlPaddingVertical),
               color: Colors.black54,
               child: Column(
                 children: [
@@ -904,15 +930,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       ),
                       Expanded(
                         child: Slider(
-                          value: _currentPosition.inSeconds.toDouble() >= 0 && 
-                                 _totalDuration.inSeconds > 0 && 
-                                 _currentPosition.inSeconds <= _totalDuration.inSeconds
+                          value: _currentPosition.inSeconds.toDouble() >= 0 &&
+                                  _totalDuration.inSeconds > 0 &&
+                                  _currentPosition.inSeconds <=
+                                      _totalDuration.inSeconds
                               ? _currentPosition.inSeconds.toDouble()
                               : 0.0,
                           min: 0,
-                          max: _totalDuration.inSeconds.toDouble() > 0 ? _totalDuration.inSeconds.toDouble() : 1,
+                          max: _totalDuration.inSeconds.toDouble() > 0
+                              ? _totalDuration.inSeconds.toDouble()
+                              : 1,
                           onChanged: (value) {
-                            _controller!.seekTo(Duration(seconds: value.toInt()));
+                            _controller!
+                                .seekTo(Duration(seconds: value.toInt()));
                             _startHideControlsTimer();
                           },
                           onChangeStart: (value) {
@@ -942,7 +972,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ),
     );
   }
-  
+
   // Dikey mod için üst kontroller
   Widget _buildPortraitTopControls() {
     return Row(
@@ -959,11 +989,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
               DeviceOrientation.landscapeLeft,
               DeviceOrientation.landscapeRight,
             ]);
-            
+
             Navigator.pop(context);
           },
         ),
-        
+
         // İçerik başlığı - ortada
         Expanded(
           child: Text(
@@ -977,7 +1007,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        
+
         // 3-nokta menü butonu - sağda
         PopupMenuButton<String>(
           icon: const Icon(Icons.more_vert, color: Colors.white),
@@ -1038,7 +1068,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ],
     );
   }
-  
+
   // Yatay mod için üst kontroller
   Widget _buildLandscapeTopControls() {
     return Row(
@@ -1055,11 +1085,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
               DeviceOrientation.landscapeLeft,
               DeviceOrientation.landscapeRight,
             ]);
-            
+
             Navigator.pop(context);
           },
         ),
-        
+
         // İçerik başlığı - ortada
         Expanded(
           child: Text(
@@ -1073,7 +1103,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             overflow: TextOverflow.ellipsis,
           ),
         ),
-        
+
         // Sağ taraftaki kontrol butonları
         Row(
           children: [
@@ -1112,18 +1142,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
               onPressed: _toggleMute,
             ),
-            // Tam ekran butonu
+            // Ekran döndürme kilidi ikonuna geçtik
             IconButton(
+              iconSize: 24,
               icon: Icon(
-                _isFullScreen ? Icons.fullscreen_exit : Icons.fullscreen,
+                _isFullScreen
+                    ? Icons.screen_lock_rotation
+                    : Icons.screen_rotation,
                 color: Colors.white,
               ),
               onPressed: () {
-                // Tam ekran durumunu değiştir ve UI'yı güncelle
+                // Döndürme kilidini değiştir ve UI'yı güncelle
                 setState(() {
                   _isFullScreen = !_isFullScreen;
                 });
-                
+
                 // Ekran yönlendirmesini ayarla
                 if (_isFullScreen) {
                   SystemChrome.setPreferredOrientations([
@@ -1138,7 +1171,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     DeviceOrientation.landscapeRight,
                   ]);
                 }
-                
+
                 _startHideControlsTimer();
               },
             ),
@@ -1147,7 +1180,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ],
     );
   }
-  
+
   // PopupMenu seçimlerini işle
   void _handleMenuSelection(String value) {
     switch (value) {
@@ -1164,7 +1197,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         setState(() {
           _isFullScreen = !_isFullScreen;
         });
-        
+
         // Ekran yönlendirmesini ayarla
         if (_isFullScreen) {
           SystemChrome.setPreferredOrientations([
@@ -1183,7 +1216,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     _startHideControlsTimer();
   }
-  
+
   // Altyazı seçim diyaloğunu göster
   void _showSubtitlesDialog() {
     showDialog(
@@ -1219,15 +1252,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
       ),
     );
   }
-  
+
   String _formatDuration(Duration duration) {
     String twoDigits(int n) => n.toString().padLeft(2, '0');
     final hours = twoDigits(duration.inHours);
     final minutes = twoDigits(duration.inMinutes.remainder(60));
     final seconds = twoDigits(duration.inSeconds.remainder(60));
-    
-    return duration.inHours > 0 
-        ? '$hours:$minutes:$seconds' 
+
+    return duration.inHours > 0
+        ? '$hours:$minutes:$seconds'
         : '$minutes:$seconds';
   }
-} 
+}
