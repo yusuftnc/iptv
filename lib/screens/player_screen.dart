@@ -39,8 +39,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _isDraggingProgress = false;
   double _currentVolume = 100;
   bool _isMuted = false;
-  List<String> _availableSubtitles = [];
-  String? _currentSubtitle;
+  Map<int, String> _availableSubtitles = {}; // id -> name
+  int? _currentSubtitleId; // VLC track id, -1 => Kapalı
   Duration _currentPosition = Duration.zero;
   Duration _totalDuration = Duration.zero;
 
@@ -420,6 +420,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // Controller hazır olduğunda çalışacak listener
       _controller!.addOnInitListener(() async {
         print("Debug - Video controller initialize oldu");
+        await _loadSubtitles();
 
         if (!shouldAutoPlay) {
           // Eğer autoPlay false ise, video durmuş halde.
@@ -533,43 +534,29 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
-  void _loadSubtitles() async {
+  Future<void> _loadSubtitles() async {
+    if (_controller == null) return;
     try {
-      // VLC Player'ın altyazı API'sini kullanarak mevcut altyazıları yükle
-      if (_controller != null) {
-        // Not: Bu kısım VLC Player'ın API'sine bağlı olarak değişebilir
-        // Şu anda flutter_vlc_player paketi doğrudan altyazı listesi almayı desteklemiyor
-        // Bu nedenle bu kısım şimdilik simüle edilmiştir
-
-        // Gerçek uygulamada, altyazıları sunucudan veya video dosyasından yüklemeniz gerekebilir
-        setState(() {
-          _availableSubtitles = ['Türkçe', 'İngilizce', 'Kapalı'];
-          _currentSubtitle = 'Kapalı';
-        });
-      }
+      final tracks = await _controller!.getSpuTracks(); // Map<int,String>
+      setState(() {
+        _availableSubtitles = tracks;
+        _currentSubtitleId = -1;
+      });
     } catch (e) {
       print('Altyazılar yüklenirken hata: $e');
     }
   }
 
-  void _setSubtitle(String? subtitle) {
-    if (_controller != null) {
+  Future<void> _setSubtitle(int trackId) async {
+    if (_controller == null) return;
+    try {
+      await _controller!.setSpuTrack(trackId);
       setState(() {
-        _currentSubtitle = subtitle;
-        // VLC Player'ın altyazı API'sini kullanarak altyazıyı ayarla
-        // Not: Bu kısım VLC Player'ın API'sine bağlı olarak değişebilir
-        if (subtitle == 'Kapalı') {
-          // Altyazıyı kapat
-          // _controller!.setSpuTrack(-1);
-        } else if (subtitle == 'Türkçe') {
-          // Türkçe altyazıyı seç
-          // _controller!.setSpuTrack(0);
-        } else if (subtitle == 'İngilizce') {
-          // İngilizce altyazıyı seç
-          // _controller!.setSpuTrack(1);
-        }
+        _currentSubtitleId = trackId;
       });
       _startHideControlsTimer();
+    } catch (e) {
+      print('Altyazı seçilirken hata: $e');
     }
   }
 
@@ -1115,24 +1102,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
               onPressed: _toggleFavorite,
             ),
-            // Altyazı butonu
-            PopupMenuButton<String>(
+            // Altyazı butonu (dinamik liste)
+            IconButton(
               icon: const Icon(Icons.subtitles, color: Colors.white),
-              onSelected: _setSubtitle,
-              itemBuilder: (context) => const [
-                PopupMenuItem(
-                  value: 'Kapalı',
-                  child: Text('Kapalı'),
-                ),
-                PopupMenuItem(
-                  value: 'Türkçe',
-                  child: Text('Türkçe'),
-                ),
-                PopupMenuItem(
-                  value: 'İngilizce',
-                  child: Text('İngilizce'),
-                ),
-              ],
+              onPressed: _showSubtitlesDialog,
             ),
             // Ses butonu
             IconButton(
@@ -1218,36 +1191,46 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   // Altyazı seçim diyaloğunu göster
-  void _showSubtitlesDialog() {
+  void _showSubtitlesDialog() async {
+    if (_availableSubtitles.isEmpty && _controller != null) {
+      try {
+        final tracks = await _controller!.getSpuTracks();
+        setState(() {
+          _availableSubtitles = tracks;
+        });
+      } catch (e) {
+        print('Subtitles fetch error: $e');
+      }
+    }
+
+    final items = {
+      -1: 'Kapalı',
+      ..._availableSubtitles,
+    };
+
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('Altyazı Seç'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            ListTile(
-              title: const Text('Kapalı'),
-              onTap: () {
-                _setSubtitle('Kapalı');
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              title: const Text('Türkçe'),
-              onTap: () {
-                _setSubtitle('Türkçe');
-                Navigator.pop(context);
-              },
-            ),
-            ListTile(
-              title: const Text('İngilizce'),
-              onTap: () {
-                _setSubtitle('İngilizce');
-                Navigator.pop(context);
-              },
-            ),
-          ],
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView(
+            shrinkWrap: true,
+            children: items.entries.map((entry) {
+              final id = entry.key;
+              final name = entry.value;
+              return ListTile(
+                title: Text(name.isNotEmpty ? name : 'Altyazı $id'),
+                trailing: id == _currentSubtitleId
+                    ? const Icon(Icons.check, color: Colors.blue)
+                    : null,
+                onTap: () {
+                  _setSubtitle(id);
+                  Navigator.pop(context);
+                },
+              );
+            }).toList(),
+          ),
         ),
       ),
     );

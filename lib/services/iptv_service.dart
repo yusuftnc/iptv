@@ -188,7 +188,7 @@ class IptvService {
 
   Future<bool> login() async {
     try {
-      print('Debug - Attempting login with URL: $_serverUrl');
+      if (kDebugMode) print('Debug - Attempting login with URL: $_serverUrl');
       final response = await _dio.get(
         '$_serverUrl/player_api.php',
         queryParameters: {
@@ -206,27 +206,31 @@ class IptvService {
         ),
       );
 
-      print('Debug - Login response status: ${response.statusCode}');
-      print('Debug - Login response data: ${response.data}');
+      if (kDebugMode)
+        print('Debug - Login response status: ${response.statusCode}');
+      if (kDebugMode) print('Debug - Login response data: ${response.data}');
 
       if (response.statusCode == 200) {
         final data = response.data;
         if (data is Map<String, dynamic>) {
-          print('Debug - Login successful, user info received');
+          if (kDebugMode) print('Debug - Login successful, user info received');
           _userInfo = data;
           _isLoggedIn = true;
           return true;
         } else {
-          print('Debug - Login failed: Response data is not a Map');
+          if (kDebugMode)
+            print('Debug - Login failed: Response data is not a Map');
           return false;
         }
       }
-      print('Debug - Login failed: Status code ${response.statusCode}');
+      if (kDebugMode)
+        print('Debug - Login failed: Status code ${response.statusCode}');
       return false;
     } on DioException catch (e) {
-      print('Debug - Login DioException: ${e.message}');
-      print('Debug - DioException type: ${e.type}');
-      print('Debug - DioException response: ${e.response?.data}');
+      if (kDebugMode) print('Debug - Login DioException: ${e.message}');
+      if (kDebugMode) print('Debug - DioException type: ${e.type}');
+      if (kDebugMode)
+        print('Debug - DioException response: ${e.response?.data}');
 
       if (e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.receiveTimeout) {
@@ -238,7 +242,7 @@ class IptvService {
       }
       throw Exception('Login failed: ${e.message}');
     } catch (e) {
-      print('Debug - Unexpected login error: $e');
+      if (kDebugMode) print('Debug - Unexpected login error: $e');
       throw Exception('Beklenmeyen bir hata oluştu: $e');
     }
   }
@@ -267,7 +271,8 @@ class IptvService {
 
   Future<List<Map<String, dynamic>>> getChannels(String categoryId) async {
     try {
-      print('Debug - Getting channels for category: $categoryId');
+      if (kDebugMode)
+        print('Debug - Getting channels for category: $categoryId');
       final uri = Uri.parse('$_serverUrl/player_api.php').replace(
         queryParameters: {
           'username': _username,
@@ -277,10 +282,10 @@ class IptvService {
         },
       );
 
-      print('Debug - Request URL: ${uri.toString()}');
+      if (kDebugMode) print('Debug - Request URL: ${uri.toString()}');
       final response = await http.get(uri).timeout(const Duration(seconds: 30));
-      print('Debug - Response status: ${response.statusCode}');
-      print('Debug - Response body: ${response.body}');
+      if (kDebugMode) print('Debug - Response status: ${response.statusCode}');
+      if (kDebugMode) print('Debug - Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -310,10 +315,12 @@ class IptvService {
 
       final ok = await _urlWorks(url);
       if (ok) {
-        debugPrint('Debug - Önbellekteki format çalışıyor: $url');
+        if (kDebugMode)
+          debugPrint('Debug - Önbellekteki format çalışıyor: $url');
         return url;
       } else {
-        debugPrint('Debug - Önbellekteki format çalışmıyor, temizleniyor');
+        if (kDebugMode)
+          debugPrint('Debug - Önbellekteki format çalışmıyor, temizleniyor');
         _formatCache.remove(streamType);
       }
     }
@@ -410,7 +417,7 @@ class IptvService {
   // Filmleri getir
   Future<List<Map<String, dynamic>>> getMovies() async {
     try {
-      print('Debug - Getting all movies');
+      if (kDebugMode) print('Debug - Getting all movies');
       final uri = Uri.parse('$_serverUrl/player_api.php').replace(
         queryParameters: {
           'username': _username,
@@ -419,10 +426,10 @@ class IptvService {
         },
       );
 
-      print('Debug - Request URL: ${uri.toString()}');
+      if (kDebugMode) print('Debug - Request URL: ${uri.toString()}');
       final response = await http.get(uri).timeout(const Duration(seconds: 30));
-      print('Debug - Response status: ${response.statusCode}');
-      print('Debug - Response body: ${response.body}');
+      if (kDebugMode) print('Debug - Response status: ${response.statusCode}');
+      if (kDebugMode) print('Debug - Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -440,7 +447,7 @@ class IptvService {
   // Dizileri getir
   Future<List<Map<String, dynamic>>> getSeries() async {
     try {
-      print('Debug - Getting all series');
+      if (kDebugMode) print('Debug - Getting all series');
       final uri = Uri.parse('$_serverUrl/player_api.php').replace(
         queryParameters: {
           'username': _username,
@@ -449,10 +456,10 @@ class IptvService {
         },
       );
 
-      print('Debug - Request URL: ${uri.toString()}');
+      if (kDebugMode) print('Debug - Request URL: ${uri.toString()}');
       final response = await http.get(uri).timeout(const Duration(seconds: 30));
-      print('Debug - Response status: ${response.statusCode}');
-      print('Debug - Response body: ${response.body}');
+      if (kDebugMode) print('Debug - Response status: ${response.statusCode}');
+      if (kDebugMode) print('Debug - Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -545,7 +552,8 @@ class IptvService {
   Future<Map<String, List<Map<String, dynamic>>>> getSeriesEpisodes(
       String seriesId) async {
     try {
-      print('Debug - Getting episodes for series ID: $seriesId');
+      if (kDebugMode)
+        print('Debug - Getting episodes for series ID: $seriesId');
       final uri = Uri.parse('$_serverUrl/player_api.php').replace(
         queryParameters: {
           'username': _username,
@@ -555,12 +563,13 @@ class IptvService {
         },
       );
 
-      print(
-          'Debug - Request URL: ${uri.toString().replaceAll(_password!, '****')}');
+      if (kDebugMode)
+        print(
+            'Debug - Request URL: ${uri.toString().replaceAll(_password!, '****')}');
       final response = await http.get(uri).timeout(const Duration(seconds: 30));
-      print('Debug - Response status: ${response.statusCode}');
-      print('Debug - Response headers: ${response.headers}');
-      print('Debug - Response body: ${response.body}');
+      if (kDebugMode) print('Debug - Response status: ${response.statusCode}');
+      if (kDebugMode) print('Debug - Response headers: ${response.headers}');
+      if (kDebugMode) print('Debug - Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
