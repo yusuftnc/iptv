@@ -54,6 +54,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
   int _seekAttemptCount = 0;
   final int _maxSeekAttempts = 5;
 
+  void _cancelSeekAttempts() {
+    // Gelecekteki denemeleri engelle
+    _seekAttemptCount = _maxSeekAttempts;
+    _seekAttemptsStarted = true;
+  }
+
   // Last saved position
   Duration? _lastSavedPosition;
 
@@ -883,6 +889,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     setState(() {
                       if (_controller!.value.isPlaying) {
                         _controller!.pause();
+                        _cancelSeekAttempts();
                       } else {
                         _controller!.play();
                       }
@@ -1207,7 +1214,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       -1: 'Kapalı',
       ..._availableSubtitles,
     };
-
+    print(_availableSubtitles);
     showDialog(
       context: context,
       builder: (context) => AlertDialog(
