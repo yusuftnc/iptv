@@ -6,6 +6,7 @@ import '../services/iptv_service.dart';
 import '../services/database_service.dart';
 import 'dart:async';
 import 'dart:math' show max;
+import 'package:flutter/foundation.dart';
 
 class PlayerScreen extends StatefulWidget {
   final String contentId;
@@ -41,6 +42,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _isMuted = false;
   Map<int, String> _availableSubtitles = {}; // id -> name
   int? _currentSubtitleId; // VLC track id, -1 => Kapalı
+  Map<int, String> _audioTracks = {};
+  int? _currentAudioId;
   Duration _currentPosition = Duration.zero;
   Duration _totalDuration = Duration.zero;
 
@@ -427,6 +430,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _controller!.addOnInitListener(() async {
         print("Debug - Video controller initialize oldu");
         await _loadSubtitles();
+        await _loadAudioTracks();
 
         if (!shouldAutoPlay) {
           // Eğer autoPlay false ise, video durmuş halde.
@@ -700,6 +704,60 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _updateWatchPosition();
       }
     });
+  }
+
+  Future<void> _loadAudioTracks() async {
+    if (_controller == null) return;
+    try {
+      final tracks = await _controller!.getAudioTracks();
+      setState(() {
+        _audioTracks = tracks;
+        _currentAudioId = tracks.keys.isNotEmpty ? tracks.keys.first : null;
+      });
+      if (kDebugMode) print('Audio tracks: $tracks');
+    } catch (e) {
+      print('Audio track fetch error: $e');
+    }
+  }
+
+  Future<void> _setAudioTrack(int id) async {
+    if (_controller == null) return;
+    await _controller!.setAudioTrack(id);
+    setState(() => _currentAudioId = id);
+    _startHideControlsTimer();
+  }
+
+  void _showAudioDialog() async {
+    if (_audioTracks.isEmpty && _controller != null) {
+      await _loadAudioTracks();
+    }
+    final items = _audioTracks.isEmpty ? {-1: 'Varsayılan'} : _audioTracks;
+    showDialog(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: const Text('Ses Parçası Seç'),
+        content: SizedBox(
+          width: double.maxFinite,
+          child: ListView(
+            shrinkWrap: true,
+            children: items.entries.map((e) {
+              final id = e.key;
+              final name = e.value;
+              return ListTile(
+                title: Text(name.isNotEmpty ? name : 'Parça $id'),
+                trailing: id == _currentAudioId
+                    ? const Icon(Icons.check, color: Colors.blue)
+                    : null,
+                onTap: () {
+                  _setAudioTrack(id);
+                  Navigator.pop(context);
+                },
+              );
+            }).toList(),
+          ),
+        ),
+      ),
+    );
   }
 
   @override
@@ -1026,19 +1084,16 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
             ),
             PopupMenuItem(
-              value: 'mute',
+              value: 'audio',
               child: Row(
                 children: [
-                  Icon(
-                    _isMuted ? Icons.volume_off : Icons.volume_up,
-                    size: 20,
-                  ),
+                  Icon(Icons.volume_up, size: 20),
                   const SizedBox(width: 10),
-                  Text(_isMuted ? 'Sesi Aç' : 'Sesi Kapat'),
+                  Text('Ses Parçası'),
                 ],
               ),
             ),
-            const PopupMenuItem(
+            PopupMenuItem(
               value: 'subtitles',
               child: Row(
                 children: [
@@ -1120,11 +1175,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
             // Ses butonu
             IconButton(
-              icon: Icon(
-                _isMuted ? Icons.volume_off : Icons.volume_up,
-                color: Colors.white,
-              ),
-              onPressed: _toggleMute,
+              icon: const Icon(Icons.volume_up, color: Colors.white),
+              onPressed: _showAudioDialog,
             ),
             // Ekran döndürme kilidi ikonuna geçtik
             IconButton(
@@ -1171,8 +1223,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       case 'favorite':
         _toggleFavorite();
         break;
-      case 'mute':
-        _toggleMute();
+      case 'audio':
+        _showAudioDialog();
         break;
       case 'subtitles':
         _showSubtitlesDialog();
