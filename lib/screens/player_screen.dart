@@ -710,6 +710,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
     _positionUpdateTimer?.cancel();
     _controller?.dispose();
+
+    // Her ihtimale karşı çıkışta da portreyi zorla
+    SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
+    ]);
     super.dispose();
   }
 
@@ -721,12 +727,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
           await _controller!.stop();
         }
 
-        // Video ekranından çıkarken normal ekran modunu geri yükle
+        // Yalnızca portre modlarına geri dön
         SystemChrome.setPreferredOrientations([
           DeviceOrientation.portraitUp,
           DeviceOrientation.portraitDown,
-          DeviceOrientation.landscapeLeft,
-          DeviceOrientation.landscapeRight,
         ]);
       },
       child: Scaffold(
