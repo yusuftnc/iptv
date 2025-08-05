@@ -158,8 +158,10 @@ class _SearchScreenState extends State<SearchScreen> {
           MaterialPageRoute(
             builder: (context) => PlayerScreen(
               contentId: contentItem.id,
-              streamUrl: streamUrl,
-              contentType: type,
+              streamUrl: contentItem.streamUrl ?? '',
+              contentType: contentItem.streamType ?? 'movie',
+              name: contentItem.name,
+              streamIcon: contentItem.streamIcon,
             ),
           ),
         );

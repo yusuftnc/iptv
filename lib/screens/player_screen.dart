@@ -12,12 +12,16 @@ class PlayerScreen extends StatefulWidget {
   final String contentId;
   final String streamUrl;
   final String contentType;
+  final String name;
+  final String? streamIcon;
 
   const PlayerScreen({
     Key? key,
     required this.contentId,
     required this.streamUrl,
     required this.contentType,
+    this.name = '',
+    this.streamIcon,
   }) : super(key: key);
 
   @override
@@ -108,9 +112,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } else {
       await _databaseService.addFavorite(ContentItem(
         id: widget.contentId,
-        name: '',
+        name: widget.name,
         streamUrl: widget.streamUrl,
         streamType: widget.contentType,
+        streamIcon: widget.streamIcon,
       ));
     }
 
@@ -128,9 +133,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // İlk olarak izleme geçmişine ekle
       await _databaseService.addToWatchHistory(ContentItem(
         id: widget.contentId,
-        name: '',
+        name: widget.name,
         streamUrl: widget.streamUrl,
         streamType: widget.contentType,
+        streamIcon: widget.streamIcon,
       ));
 
       print("Debug - İzleme geçmişine eklendi");
@@ -151,9 +157,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
         final contentItem = ContentItem(
           id: widget.contentId,
-          name: '',
+          name: widget.name,
           streamUrl: widget.streamUrl,
           streamType: widget.contentType,
+          streamIcon: widget.streamIcon,
           position: _currentPosition.inSeconds,
           duration: _totalDuration.inSeconds,
         );
@@ -209,9 +216,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     // Baştan başla seçildiğinde pozisyonu sıfırla
                     _databaseService.addToWatchHistory(ContentItem(
                       id: widget.contentId,
-                      name: '',
+                      name: widget.name,
                       streamUrl: widget.streamUrl,
                       streamType: widget.contentType,
+                      streamIcon: widget.streamIcon,
                       position: 0,
                       duration: watchHistory.duration,
                     ));

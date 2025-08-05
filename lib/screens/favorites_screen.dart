@@ -74,9 +74,11 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
         context,
         MaterialPageRoute(
           builder: (context) => PlayerScreen(
-            contentId: contentItem.id,
-            streamUrl: contentItem.streamUrl ?? '',
-            contentType: contentItem.streamType ?? 'movie',
+            contentId: item.id,
+            streamUrl: item.streamUrl ?? '',
+            contentType: item.streamType ?? 'movie',
+            name: item.name,
+            streamIcon: item.streamIcon,
           ),
         ),
       );
@@ -108,7 +110,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
         final item = items[index];
         final iconUrl = item.streamIcon;
         final name = item.name;
-        
+
         return GestureDetector(
           onTap: () => _playContent(item),
           child: Container(
@@ -121,7 +123,8 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
               children: [
                 Expanded(
                   child: ClipRRect(
-                    borderRadius: const BorderRadius.vertical(top: Radius.circular(8)),
+                    borderRadius:
+                        const BorderRadius.vertical(top: Radius.circular(8)),
                     child: iconUrl != null && iconUrl.isNotEmpty
                         ? CachedNetworkImage(
                             imageUrl: iconUrl,
@@ -197,7 +200,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                         ),
                       ),
                       _buildContentGrid(_getFavoritesByType('live')),
-                      
+
                       // Filmler
                       const Padding(
                         padding: EdgeInsets.all(16.0),
@@ -211,7 +214,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                         ),
                       ),
                       _buildContentGrid(_getFavoritesByType('movie')),
-                      
+
                       // Diziler
                       const Padding(
                         padding: EdgeInsets.all(16.0),
@@ -230,4 +233,4 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                 ),
     );
   }
-} 
+}

@@ -173,6 +173,8 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                 contentId: widget.contentId,
                 streamUrl: widget.streamUrl,
                 contentType: 'movie',
+                name: widget.movieDetails.name,
+                streamIcon: widget.movieDetails.coverUrl,
               ),
             ),
           );

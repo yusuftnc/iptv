@@ -4,7 +4,6 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/content_item.dart';
 import '../services/iptv_service.dart';
 import '../services/storage_service.dart';
-import '../models/movie_details.dart';
 import 'login_screen.dart';
 import 'player_screen.dart';
 import 'series_detail_screen.dart';
@@ -12,7 +11,8 @@ import 'search_screen.dart';
 import 'favorites_screen.dart';
 import 'watch_history_screen.dart';
 import 'movie_details_screen.dart';
-import '../models/content.dart';
+import '../models/watch_history.dart';
+import '../services/database_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -41,6 +41,8 @@ class _HomeScreenState extends State<HomeScreen> {
   List<Map<String, dynamic>> _latestMovies = [];
   List<Map<String, dynamic>> _latestSeries = [];
   List<Map<String, dynamic>> _latestChannels = [];
+  List<WatchHistory> _lastWatchedMovies = [];
+  List<WatchHistory> _lastWatchedSeries = [];
 
   @override
   void initState() {
@@ -57,9 +59,12 @@ class _HomeScreenState extends State<HomeScreen> {
 
       switch (_currentIndex) {
         case 0: // Yeniler
-          _latestMovies = await _iptvService.getLatestMovies(limit: 25);
-          _latestSeries = await _iptvService.getLatestSeries(limit: 25);
+          _latestMovies = await _iptvService.getLatestMovies(limit: 30);
+          _latestSeries = await _iptvService.getLatestSeries(limit: 30);
           _latestChannels = await _iptvService.getLatestChannels(limit: 10);
+          final db = DatabaseService();
+          _lastWatchedMovies = await db.getLastWatched('movie', limit: 10);
+          _lastWatchedSeries = await db.getLastWatched('series', limit: 10);
 
           break;
         case 1: // TV Kanalları
@@ -450,6 +455,14 @@ class _HomeScreenState extends State<HomeScreen> {
 
     return ListView(
       children: [
+        if (_lastWatchedMovies.isNotEmpty) ...[
+          _buildSectionHeader('İzlenen Filmler', _lastWatchedMovies.length),
+          _buildWatchHorizontal(_lastWatchedMovies, 'movie'),
+        ],
+        if (_lastWatchedSeries.isNotEmpty) ...[
+          _buildSectionHeader('İzlenen Diziler', _lastWatchedSeries.length),
+          _buildWatchHorizontal(_lastWatchedSeries, 'series'),
+        ],
         if (_latestMovies.isNotEmpty) ...[
           _buildSectionHeader('Son Eklenen Filmler', _latestMovies.length),
           _buildContentGrid(_latestMovies, 'movie'),
@@ -701,6 +714,8 @@ class _HomeScreenState extends State<HomeScreen> {
               streamUrl: streamUrl,
               contentId: contentId,
               contentType: contentType,
+              name: contentId,
+              streamIcon: contentId,
             ),
           ),
         );
@@ -1014,6 +1029,64 @@ class _HomeScreenState extends State<HomeScreen> {
             content: Text('İçerik yüklenirken hata oluştu: ${e.toString()}')),
       );
     }
+  }
+
+  Widget _buildWatchHorizontal(List<WatchHistory> items, String type) {
+    return SizedBox(
+      height: 220,
+      child: ListView.separated(
+        scrollDirection: Axis.horizontal,
+        itemCount: items.length,
+        separatorBuilder: (_, __) => const SizedBox(width: 8),
+        itemBuilder: (context, index) {
+          final h = items[index];
+          final iconUrl = h.streamIcon;
+          final name = h.name ?? '';
+          final contentItem = ContentItem(
+            id: h.contentId,
+            name: name,
+            streamIcon: iconUrl,
+            streamType: type,
+            streamUrl: h.streamUrl,
+          );
+          return SizedBox(
+            width: 130,
+            child: _buildCardForHorizontal(contentItem),
+          );
+        },
+      ),
+    );
+  }
+
+  Widget _buildCardForHorizontal(ContentItem item) {
+    final iconUrl =
+        item.streamType == 'series' ? item.streamIcon : item.streamIcon;
+    final iconWidget = item.streamType == 'movie'
+        ? const Icon(Icons.movie, color: Colors.white, size: 30)
+        : const Icon(Icons.video_library, color: Colors.white, size: 30);
+    return Card(
+      clipBehavior: Clip.antiAlias,
+      color: Colors.grey[900],
+      child: InkWell(
+        onTap: () => _openContent(item),
+        child: Stack(
+          fit: StackFit.expand,
+          children: [
+            if (iconUrl != null && iconUrl.isNotEmpty)
+              CachedNetworkImage(
+                imageUrl: iconUrl,
+                fit: BoxFit.cover,
+                placeholder: (_, __) =>
+                    const Center(child: CircularProgressIndicator()),
+                errorWidget: (_, __, ___) =>
+                    Container(color: Colors.grey[800], child: iconWidget),
+              )
+            else
+              Container(color: Colors.grey[800], child: iconWidget),
+          ],
+        ),
+      ),
+    );
   }
 }
 

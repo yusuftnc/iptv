@@ -51,7 +51,8 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen> {
       context: context,
       builder: (context) => AlertDialog(
         title: const Text('İzleme Geçmişini Temizle'),
-        content: const Text('Tüm izleme geçmişiniz silinecek. Devam etmek istiyor musunuz?'),
+        content: const Text(
+            'Tüm izleme geçmişiniz silinecek. Devam etmek istiyor musunuz?'),
         actions: [
           TextButton(
             onPressed: () => Navigator.pop(context, false),
@@ -98,9 +99,11 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen> {
         context,
         MaterialPageRoute(
           builder: (context) => PlayerScreen(
-            contentId: contentItem.id,
-            streamUrl: contentItem.streamUrl ?? '',
-            contentType: contentItem.streamType ?? 'movie',
+            contentId: item.contentId,
+            streamUrl: item.streamUrl ?? '',
+            contentType: item.streamType ?? 'movie',
+            name: item.name ?? '',
+            streamIcon: item.streamIcon,
           ),
         ),
       ).then((_) => _loadWatchHistory());
@@ -129,10 +132,10 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen> {
 
     final positionMinutes = (position / 60).floor();
     final positionSeconds = position % 60;
-    
+
     final durationMinutes = (duration / 60).floor();
     final durationSeconds = duration % 60;
-    
+
     return '${positionMinutes.toString().padLeft(2, '0')}:${positionSeconds.toString().padLeft(2, '0')} / ${durationMinutes.toString().padLeft(2, '0')}:${durationSeconds.toString().padLeft(2, '0')}';
   }
 
@@ -187,37 +190,42 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen> {
                         onTap: () => _playContent(item),
                         child: Card(
                           color: Colors.grey[900],
-                          margin: const EdgeInsets.symmetric(vertical: 4, horizontal: 8),
+                          margin: const EdgeInsets.symmetric(
+                              vertical: 4, horizontal: 8),
                           child: ListTile(
-                            leading: item.streamIcon != null && item.streamIcon!.isNotEmpty
-                              ? ClipRRect(
-                                  borderRadius: BorderRadius.circular(4),
-                                  child: Image.network(
-                                    item.streamIcon!,
+                            leading: item.streamIcon != null &&
+                                    item.streamIcon!.isNotEmpty
+                                ? ClipRRect(
+                                    borderRadius: BorderRadius.circular(4),
+                                    child: Image.network(
+                                      item.streamIcon!,
+                                      width: 50,
+                                      height: 50,
+                                      fit: BoxFit.cover,
+                                      errorBuilder:
+                                          (context, error, stackTrace) {
+                                        return Container(
+                                          width: 50,
+                                          height: 50,
+                                          color: Colors.grey[800],
+                                          child: const Icon(Icons.error),
+                                        );
+                                      },
+                                    ),
+                                  )
+                                : Container(
                                     width: 50,
                                     height: 50,
-                                    fit: BoxFit.cover,
-                                    errorBuilder: (context, error, stackTrace) {
-                                      return Container(
-                                        width: 50,
-                                        height: 50,
-                                        color: Colors.grey[800],
-                                        child: const Icon(Icons.error),
-                                      );
-                                    },
+                                    color: Colors.grey[800],
+                                    child: Icon(
+                                      item.streamType == 'live'
+                                          ? Icons.live_tv
+                                          : item.streamType == 'movie'
+                                              ? Icons.movie
+                                              : Icons.tv,
+                                      color: Colors.white,
+                                    ),
                                   ),
-                                )
-                              : Container(
-                                  width: 50,
-                                  height: 50,
-                                  color: Colors.grey[800],
-                                  child: Icon(
-                                    item.streamType == 'live' ? Icons.live_tv 
-                                    : item.streamType == 'movie' ? Icons.movie 
-                                    : Icons.tv,
-                                    color: Colors.white,
-                                  ),
-                                ),
                             title: Text(
                               item.name,
                               style: const TextStyle(color: Colors.white),
@@ -227,31 +235,42 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen> {
                               children: [
                                 Text(
                                   _formatWatchDate(item.watchDate),
-                                  style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                                  style: TextStyle(
+                                      color: Colors.grey[400], fontSize: 12),
                                 ),
-                                if (item.position != null && item.duration != null)
+                                if (item.position != null &&
+                                    item.duration != null)
                                   Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
                                     children: [
                                       const SizedBox(height: 4),
                                       Text(
-                                        _formatDuration(item.position, item.duration),
-                                        style: TextStyle(color: Colors.grey[400], fontSize: 12),
+                                        _formatDuration(
+                                            item.position, item.duration),
+                                        style: TextStyle(
+                                            color: Colors.grey[400],
+                                            fontSize: 12),
                                       ),
                                       const SizedBox(height: 4),
                                       LinearProgressIndicator(
-                                        value: _calculateProgress(item.position, item.duration),
+                                        value: _calculateProgress(
+                                            item.position, item.duration),
                                         backgroundColor: Colors.grey[700],
-                                        valueColor: AlwaysStoppedAnimation<Color>(Colors.red),
+                                        valueColor:
+                                            AlwaysStoppedAnimation<Color>(
+                                                Colors.red),
                                       ),
                                     ],
                                   ),
                               ],
                             ),
                             trailing: Icon(
-                              item.streamType == 'live' ? Icons.live_tv 
-                              : item.streamType == 'movie' ? Icons.movie 
-                              : Icons.tv,
+                              item.streamType == 'live'
+                                  ? Icons.live_tv
+                                  : item.streamType == 'movie'
+                                      ? Icons.movie
+                                      : Icons.tv,
                               color: Colors.blue,
                             ),
                           ),
@@ -262,4 +281,4 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen> {
                 ),
     );
   }
-} 
+}

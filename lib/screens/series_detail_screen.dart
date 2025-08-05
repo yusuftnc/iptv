@@ -23,20 +23,20 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   bool _isLoading = true;
   String _errorMessage = '';
   bool _isFavorite = false;
-  
+
   // Dizi bilgileri
   Map<String, dynamic> _seriesInfo = {};
   Map<String, List<Map<String, dynamic>>> _episodesBySeason = {};
   List<String> _seasons = [];
   String _selectedSeason = '';
-  
+
   @override
   void initState() {
     super.initState();
     _loadSeriesDetails();
     _checkIfFavorite();
   }
-  
+
   Future<void> _checkIfFavorite() async {
     final isFavorite = await _databaseService.isFavorite(widget.seriesItem.id);
     if (mounted) {
@@ -52,29 +52,30 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     } else {
       await _databaseService.addFavorite(widget.seriesItem);
     }
-    
+
     setState(() {
       _isFavorite = !_isFavorite;
     });
   }
-  
+
   Future<void> _loadSeriesDetails() async {
     try {
       setState(() {
         _isLoading = true;
         _errorMessage = '';
       });
-      
+
       // Dizi bilgilerini al
       final seriesInfo = await _iptvService.getSeriesInfo(widget.seriesItem.id);
-      
+
       // Dizi bölümlerini al
-      final episodesBySeason = await _iptvService.getSeriesEpisodes(widget.seriesItem.id);
-      
+      final episodesBySeason =
+          await _iptvService.getSeriesEpisodes(widget.seriesItem.id);
+
       // Sezonları sırala
       final seasons = episodesBySeason.keys.toList();
       seasons.sort((a, b) => int.parse(a).compareTo(int.parse(b)));
-      
+
       setState(() {
         _seriesInfo = seriesInfo;
         _episodesBySeason = episodesBySeason;
@@ -84,27 +85,30 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       });
     } catch (e) {
       setState(() {
-        _errorMessage = 'Dizi bilgileri yüklenirken hata oluştu: ${e.toString()}';
+        _errorMessage =
+            'Dizi bilgileri yüklenirken hata oluştu: ${e.toString()}';
         _isLoading = false;
       });
     }
   }
-  
+
   void _playEpisode(Map<String, dynamic> episode) {
     // Bölüm için ContentItem oluştur
     final episodeItem = ContentItem(
       id: episode['id'].toString(),
-      name: '${widget.seriesItem.name} - S${_selectedSeason}E${episode['episode_num']} - ${episode['title']}',
+      name:
+          '${widget.seriesItem.name} - S${_selectedSeason}E${episode['episode_num']} - ${episode['title']}',
       streamType: 'series',
       streamIcon: widget.seriesItem.streamIcon,
       description: episode['plot'] ?? '',
       category: widget.seriesItem.category,
       // Eğer container_extension varsa, doğrudan stream URL'ini oluştur
-      streamUrl: episode['container_extension'] != null && episode['container_extension'].toString().isNotEmpty
+      streamUrl: episode['container_extension'] != null &&
+              episode['container_extension'].toString().isNotEmpty
           ? '${_iptvService.getServerUrl()}/series/${_iptvService.getUsername()}/${_iptvService.getPassword()}/${episode['id']}.${episode['container_extension']}'
           : null,
     );
-    
+
     // Oynatma ekranına git
     Navigator.push(
       context,
@@ -113,6 +117,8 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
           contentId: episodeItem.id,
           streamUrl: episodeItem.streamUrl ?? '',
           contentType: 'series',
+          name: episodeItem.name,
+          streamIcon: episodeItem.streamIcon,
         ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(opacity: animation, child: child);
@@ -143,7 +149,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       body: _buildBody(),
     );
   }
-  
+
   Widget _buildBody() {
     if (_isLoading) {
       return const Center(
@@ -152,7 +158,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
         ),
       );
     }
-    
+
     if (_errorMessage.isNotEmpty) {
       return Center(
         child: Column(
@@ -181,7 +187,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
         ),
       );
     }
-    
+
     if (_seasons.isEmpty) {
       return const Center(
         child: Text(
@@ -190,16 +196,16 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
         ),
       );
     }
-    
+
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
         // Dizi bilgileri
         _buildSeriesInfo(),
-        
+
         // Sezon seçici
         _buildSeasonSelector(),
-        
+
         // Bölüm listesi
         Expanded(
           child: _buildEpisodesList(),
@@ -207,7 +213,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       ],
     );
   }
-  
+
   Widget _buildSeriesInfo() {
     final plot = _seriesInfo['plot'] ?? widget.seriesItem.description ?? '';
     final cast = _seriesInfo['cast'] ?? '';
@@ -215,7 +221,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     final genre = _seriesInfo['genre'] ?? '';
     final releaseDate = _seriesInfo['releaseDate'] ?? '';
     final rating = _seriesInfo['rating'] ?? '';
-    
+
     // Rating'i 10 üzerinden alıp 5 üzerine çevir
     double ratingValue = 0;
     if (rating.isNotEmpty) {
@@ -225,7 +231,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
         ratingValue = 0;
       }
     }
-    
+
     return Container(
       padding: const EdgeInsets.all(16),
       child: Row(
@@ -234,7 +240,8 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
           // Poster, Yıldızlar ve Tarih
           Column(
             children: [
-              if (widget.seriesItem.streamIcon != null && widget.seriesItem.streamIcon!.isNotEmpty)
+              if (widget.seriesItem.streamIcon != null &&
+                  widget.seriesItem.streamIcon!.isNotEmpty)
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: CachedNetworkImage(
@@ -268,11 +275,15 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: List.generate(5, (index) {
                     if (index < ratingValue.floor()) {
-                      return const Icon(Icons.star, color: Colors.amber, size: 16);
-                    } else if (index == ratingValue.floor() && ratingValue % 1 >= 0.5) {
-                      return const Icon(Icons.star_half, color: Colors.amber, size: 16);
+                      return const Icon(Icons.star,
+                          color: Colors.amber, size: 16);
+                    } else if (index == ratingValue.floor() &&
+                        ratingValue % 1 >= 0.5) {
+                      return const Icon(Icons.star_half,
+                          color: Colors.amber, size: 16);
                     } else {
-                      return const Icon(Icons.star_border, color: Colors.amber, size: 16);
+                      return const Icon(Icons.star_border,
+                          color: Colors.amber, size: 16);
                     }
                   }),
                 ),
@@ -287,7 +298,8 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.calendar_today, color: Colors.blue, size: 14),
+                    const Icon(Icons.calendar_today,
+                        color: Colors.blue, size: 14),
                     const SizedBox(width: 4),
                     Text(
                       releaseDate,
@@ -298,9 +310,9 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
               ],
             ],
           ),
-          
+
           const SizedBox(width: 16),
-          
+
           // Dizi bilgileri
           Expanded(
             child: Column(
@@ -323,7 +335,6 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                   ),
                   const SizedBox(height: 8),
                 ],
-                
                 if (genre.isNotEmpty) ...[
                   const Text(
                     'Tür',
@@ -339,7 +350,6 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
                   ),
                   const SizedBox(height: 8),
                 ],
-                
                 if (cast.isNotEmpty) ...[
                   const Text(
                     'Oyuncular',
@@ -364,7 +374,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       ),
     );
   }
-  
+
   Widget _buildSeasonSelector() {
     return Container(
       height: 50,
@@ -375,7 +385,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
         itemBuilder: (context, index) {
           final season = _seasons[index];
           final isSelected = season == _selectedSeason;
-          
+
           return Padding(
             padding: const EdgeInsets.only(right: 8),
             child: ElevatedButton(
@@ -398,10 +408,10 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       ),
     );
   }
-  
+
   Widget _buildEpisodesList() {
     final episodes = _episodesBySeason[_selectedSeason] ?? [];
-    
+
     if (episodes.isEmpty) {
       return const Center(
         child: Text(
@@ -410,7 +420,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
         ),
       );
     }
-    
+
     return ListView.separated(
       padding: const EdgeInsets.all(16),
       cacheExtent: 100.0,
@@ -422,7 +432,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
         final title = episode['title'] ?? 'Bölüm $episodeNum';
         final plot = episode['plot'] ?? '';
         final duration = episode['duration'] ?? '';
-        
+
         return Card(
           color: Colors.grey[900],
           margin: EdgeInsets.zero,
@@ -464,7 +474,8 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
               ],
             ),
             trailing: IconButton(
-              icon: const Icon(Icons.play_circle_outline, color: Colors.blue, size: 36),
+              icon: const Icon(Icons.play_circle_outline,
+                  color: Colors.blue, size: 36),
               onPressed: () => _playEpisode(episode),
             ),
             onTap: () => _playEpisode(episode),
@@ -473,4 +484,4 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       },
     );
   }
-} 
+}
