@@ -1033,7 +1033,7 @@ class _HomeScreenState extends State<HomeScreen> {
 
   Widget _buildWatchHorizontal(List<WatchHistory> items, String type) {
     return SizedBox(
-      height: 220,
+      height: 200,
       child: ListView.separated(
         scrollDirection: Axis.horizontal,
         itemCount: items.length,
