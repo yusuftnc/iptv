@@ -1,4 +1,5 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
+import 'package:iptv_app/utils/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
@@ -78,7 +79,7 @@ class StorageService {
       final List<dynamic> decoded = json.decode(historyJson);
       return decoded.map((item) => item.toString()).toList();
     } catch (e) {
-      print('Arama geçmişi çözümlenirken hata: $e');
+      Log.d("DBG", 'Arama geçmişi çözümlenirken hata: $e');
       return [];
     }
   }

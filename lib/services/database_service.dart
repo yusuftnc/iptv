@@ -1,4 +1,5 @@
 import 'package:hive/hive.dart';
+import 'package:iptv_app/utils/logger.dart';
 import '../models/favorite_item.dart';
 import '../models/watch_history.dart';
 import '../models/user_settings.dart';
@@ -61,7 +62,7 @@ class DatabaseService {
 
   Future<void> addToWatchHistory(ContentItem contentItem) async {
     try {
-      print(
+      Log.d("DBG",
           "Debug - Database addToWatchHistory - ContentID: ${contentItem.id}, Pozisyon: ${contentItem.position}, Süre: ${contentItem.duration}");
       final box = await Hive.openBox<WatchHistory>(_watchHistoryBox);
 
@@ -81,10 +82,10 @@ class DatabaseService {
 
       // Kaydettikten sonra kontrol et
       final savedItem = box.get(contentItem.id);
-      print(
+      Log.d("DBG",
           "Debug - Database kaydedilen: ContentID: ${savedItem?.contentId}, Pozisyon: ${savedItem?.position}, Süre: ${savedItem?.duration}");
     } catch (e) {
-      print("Debug - Database addToWatchHistory hata: $e");
+      Log.d("DBG", "Debug - Database addToWatchHistory hata: $e");
     }
   }
 
@@ -110,7 +111,7 @@ class DatabaseService {
   Future<WatchHistory?> getWatchPosition(String contentId) async {
     final box = await Hive.openBox<WatchHistory>(_watchHistoryBox);
     final result = box.get(contentId);
-    print(
+    Log.d("DBG",
         "Debug - Database getWatchPosition - ContentID: $contentId, Pozisyon: ${result?.position}, Süre: ${result?.duration}");
     return result;
   }

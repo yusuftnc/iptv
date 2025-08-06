@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
+import 'package:iptv_app/utils/logger.dart';
 import '../models/content_item.dart';
 import '../services/iptv_service.dart';
 import '../services/database_service.dart';
@@ -76,13 +77,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     // Tam ekran (landscape) modunu başlat ve kilidi açık (rotasyon kilitli)
     SystemChrome.setPreferredOrientations([
+      DeviceOrientation.portraitUp,
+      DeviceOrientation.portraitDown,
       DeviceOrientation.landscapeLeft,
       DeviceOrientation.landscapeRight,
     ]);
     SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
 
-    // Başlangıçta kilidi açık kabul et
-    _isFullScreen = true;
+    // Başlangıçta kilitli değil (serbest döndürme)
+    _isFullScreen = false;
 
     // Önce izleme pozisyonunu kontrol et
     _checkWatchPosition().then((_) {
@@ -126,9 +129,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _addToWatchHistory() async {
     try {
-      print(
+      Log.d("DBG",
           "Debug - İlk izleme pozisyonu kontrolü başlatılıyor: ${widget.contentId}");
-      print("Debug - İzleme geçmişine ekleniyor: ${widget.contentId}");
+      Log.d("DBG", "Debug - İzleme geçmişine ekleniyor: ${widget.contentId}");
 
       // İlk olarak izleme geçmişine ekle
       await _databaseService.addToWatchHistory(ContentItem(
@@ -138,10 +141,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         streamType: widget.contentType,
         streamIcon: widget.streamIcon,
       ));
-
-      print("Debug - İzleme geçmişine eklendi");
+      Log.d("DBG", "Debug - İzleme geçmişine eklendi");
     } catch (e) {
-      print("Debug - İzleme geçmişine eklenirken hata: $e");
+      Log.d("DBG", "Debug - İzleme geçmişine eklenirken hata: $e");
     }
   }
 
@@ -151,9 +153,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _currentPosition.inSeconds > 0 &&
           _totalDuration.inSeconds > 0 &&
           _currentPosition.inSeconds < _totalDuration.inSeconds) {
-        print(
+        Log.d("DBG",
             "Debug - İzleme pozisyonu güncelleniyor: ${_currentPosition.inSeconds} / ${_totalDuration.inSeconds}");
-        print("Debug - ContentItem ID: ${widget.contentId}");
+        Log.d("DBG", "Debug - ContentItem ID: ${widget.contentId}");
 
         final contentItem = ContentItem(
           id: widget.contentId,
@@ -170,37 +172,37 @@ class _PlayerScreenState extends State<PlayerScreen> {
         // Veritabanına kaydedilen pozisyonu doğrula
         final savedPosition =
             await _databaseService.getWatchPosition(widget.contentId);
-        print(
+        Log.d("DBG",
             "Debug - Kaydedilen pozisyon kontrolü: ${savedPosition?.position} / ${savedPosition?.duration}");
-
-        print("Debug - İzleme pozisyonu güncellendi");
+        Log.d("DBG", "Debug - İzleme pozisyonu güncellendi");
       } else {
-        print(
+        Log.d("DBG",
             "Debug - İzleme pozisyonu güncellenemiyor: ${_controller != null ? 'Controller var' : 'Controller yok'}, Pozisyon: ${_currentPosition.inSeconds}");
       }
     } catch (e) {
-      print("Debug - İzleme pozisyonu güncellenirken hata: $e");
-      print("Debug - Hata türü: ${e.runtimeType}");
+      Log.d("DBG", "Debug - İzleme pozisyonu güncellenirken hata: $e");
+      Log.d("DBG", "Debug - Hata türü: ${e.runtimeType}");
     }
   }
 
   Future<void> _checkWatchPosition() async {
     try {
-      print("Debug - İzleme pozisyonu kontrol ediliyor: ${widget.contentId}");
+      Log.d("DBG",
+          "Debug - İzleme pozisyonu kontrol ediliyor: ${widget.contentId}");
       final watchHistory =
           await _databaseService.getWatchPosition(widget.contentId);
-
-      print(
+      Log.d("DBG",
           "Debug - Alınan izleme geçmişi: ${watchHistory?.position} / ${watchHistory?.duration}");
-      print("Debug - İzleme geçmişi contentId: ${watchHistory?.contentId}");
-      print("Debug - Current contentItem id: ${widget.contentId}");
+      Log.d("DBG",
+          "Debug - İzleme geçmişi contentId: ${watchHistory?.contentId}");
+      Log.d("DBG", "Debug - Current contentItem id: ${widget.contentId}");
 
       if (watchHistory != null &&
           watchHistory.position != null &&
           watchHistory.position! > 10 &&
           watchHistory.duration != null &&
           watchHistory.position! < (watchHistory.duration! - 30)) {
-        print("Debug - İzleme pozisyonu bulundu, diyalog gösteriliyor");
+        Log.d("DBG", "Debug - İzleme pozisyonu bulundu, diyalog gösteriliyor");
 
         if (mounted) {
           final result = await showDialog<bool>(
@@ -234,11 +236,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ],
             ),
           );
-
-          print("Debug - Kullanıcı tercihi: $result");
+          Log.d("DBG", "Debug - Kullanıcı tercihi: $result");
 
           if (result == true && _controller != null) {
-            print(
+            Log.d("DBG",
                 "Debug - Video ${watchHistory.position!} saniyeye ilerletiliyor");
 
             // Birden fazla kez seekTo dene (controller'ın tamamen hazır olması için)
@@ -250,12 +251,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
               Future.delayed(const Duration(seconds: 1), () async {
                 if (_controller != null && mounted) {
                   final currentPos = _controller!.value.position.inSeconds;
-                  print(
+                  Log.d("DBG",
                       "Debug - İlerleme sonrası pozisyon kontrolü: $currentPos");
 
                   // Eğer pozisyon hala başlangıçtaysa tekrar dene
                   if (currentPos < 3) {
-                    print(
+                    Log.d("DBG",
                         "Debug - Pozisyon doğru ayarlanmamış, tekrar deneniyor");
                     await _controller!
                         .seekTo(Duration(seconds: watchHistory.position!));
@@ -263,44 +264,46 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 }
               });
             } catch (e) {
-              print("Debug - seekTo sırasında hata: $e");
+              Log.d("DBG", "Debug - seekTo sırasında hata: $e");
 
               // Diğer yöntemi dene
               Future.delayed(const Duration(seconds: 2), () async {
                 if (_controller != null && mounted) {
                   try {
-                    print("Debug - Alternatif yöntemle ilerleme deneniyor");
+                    Log.d("DBG",
+                        "Debug - Alternatif yöntemle ilerleme deneniyor");
                     await _controller!
                         .seekTo(Duration(seconds: watchHistory.position!));
                   } catch (e) {
-                    print("Debug - Alternatif ilerleme sırasında hata: $e");
+                    Log.d("DBG",
+                        "Debug - Alternatif ilerleme sırasında hata: $e");
                   }
                 }
               });
             }
-
-            print("Debug - Video pozisyon ayarlaması tamamlandı");
+            Log.d("DBG", "Debug - Video pozisyon ayarlaması tamamlandı");
           }
         }
       } else {
-        print(
+        Log.d("DBG",
             "Debug - Devam etmek için uygun pozisyon bulunamadı veya izleme geçmişi yok");
         if (watchHistory == null) {
-          print("Debug - İzleme geçmişi bulunamadı");
+          Log.d("DBG", "Debug - İzleme geçmişi bulunamadı");
         } else if (watchHistory.position == null) {
-          print("Debug - İzleme pozisyonu null");
+          Log.d("DBG", "Debug - İzleme pozisyonu null");
         } else if (watchHistory.position! <= 10) {
-          print("Debug - İzleme pozisyonu çok kısa: ${watchHistory.position}");
+          Log.d("DBG",
+              "Debug - İzleme pozisyonu çok kısa: ${watchHistory.position}");
         } else if (watchHistory.duration == null) {
-          print("Debug - Video süresi null");
+          Log.d("DBG", "Debug - Video süresi null");
         } else if (watchHistory.position! >= (watchHistory.duration! - 30)) {
-          print(
+          Log.d("DBG",
               "Debug - İzleme pozisyonu videonun sonuna çok yakın: ${watchHistory.position} / ${watchHistory.duration}");
         }
       }
     } catch (e) {
-      print('Debug - İzleme pozisyonu kontrol edilirken hata: $e');
-      print('Debug - Hata türü: ${e.runtimeType}');
+      Log.d("DBG", 'Debug - İzleme pozisyonu kontrol edilirken hata: $e');
+      Log.d("DBG", 'Debug - Hata türü: ${e.runtimeType}');
     }
   }
 
@@ -318,7 +321,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (widget.streamUrl != null && widget.streamUrl.isNotEmpty) {
         // Eğer ContentItem'da zaten bir URL varsa, onu kullan
         streamUrl = widget.streamUrl;
-        print('Debug - ContentItem\'dan URL kullanılıyor: $streamUrl');
+        Log.d("DBG", 'Debug - ContentItem\'dan URL kullanılıyor: $streamUrl');
       } else {
         // Yoksa, servis üzerinden URL'i al
         final streamType = widget.contentType ?? 'live';
@@ -352,7 +355,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
               // İlk formatı kullan (daha sonra diğerlerini deneyebiliriz)
               streamUrl = formats.first;
-              print('Debug - Alternatif URL kullanılıyor: $streamUrl');
+              Log.d("DBG", 'Debug - Alternatif URL kullanılıyor: $streamUrl');
             }
           }
         } else {
@@ -362,24 +365,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
             streamType: streamType,
           );
         }
-
-        print('Debug - Servis üzerinden URL alındı: $streamUrl');
+        Log.d("DBG", 'Debug - Servis üzerinden URL alındı: $streamUrl');
       }
-
-      print('Debug - Stream URL: $streamUrl');
-      print('Debug - Content Type: ${widget.contentType}');
-      print('Debug - Content ID: ${widget.contentId}');
+      Log.d("DBG", 'Debug - Stream URL: $streamUrl');
+      Log.d("DBG", 'Debug - Content Type: ${widget.contentType}');
+      Log.d("DBG", 'Debug - Content ID: ${widget.contentId}');
 
       if (streamUrl == null || streamUrl.isEmpty) {
         throw Exception('Stream URL bulunamadı');
       }
 
       // İlk önce izleme pozisyonunu al
-      print(
+      Log.d("DBG",
           "Debug - Video yüklenmeden önce izleme pozisyonu kontrol ediliyor.");
       final watchHistory =
           await _databaseService.getWatchPosition(widget.contentId);
-      print(
+      Log.d("DBG",
           "Debug - İzleme geçmişi: ${watchHistory?.position} / ${watchHistory?.duration}");
 
       // İzleme pozisyonu uygun mu kontrol et
@@ -393,7 +394,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           watchHistory.position! < (watchHistory.duration! - 30)) {
         shouldResume = true;
         resumePosition = watchHistory.position;
-        print("Debug - Video ${resumePosition} saniyeden devam edecek");
+        Log.d("DBG", "Debug - Video ${resumePosition} saniyeden devam edecek");
       }
 
       // İzleme pozisyonu uygulama başlatılacağı pozisyonu (seekTo pozisyonunu) kaydet
@@ -417,8 +418,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           VlcVideoOptions.skipFrames(true),
         ]),
       );
-
-      print("Debug - VLC Player controller oluşturuluyor");
+      Log.d("DBG", "Debug - VLC Player controller oluşturuluyor");
 
       // Controller'ı eğer izleme pozisyonu varsa ve bu bir film/diziyse (live değilse)
       // autoPlay:false ile başlat, böylece ilk frame'de pozisyona atlaması daha kolay olur
@@ -436,20 +436,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
       // Controller hazır olduğunda çalışacak listener
       _controller!.addOnInitListener(() async {
-        print("Debug - Video controller initialize oldu");
+        Log.d("DBG", "Debug - Video controller initialize oldu");
         await _loadSubtitles();
         await _loadAudioTracks();
 
         if (!shouldAutoPlay) {
           // Eğer autoPlay false ise, video durmuş halde.
           // Pozisyonu ayarladıktan sonra oynatmaya başlayacağız
-          print("Debug - Pozisyon ayarlanana kadar video duraklatıldı");
+          Log.d("DBG", "Debug - Pozisyon ayarlanana kadar video duraklatıldı");
         }
 
         // İzleme pozisyonuna gitmeyi daha sonra deneyelim,
         // controller tam olarak hazır olduğunda
         if (_shouldSeekToInitialPosition && _initialSeekPosition != null) {
-          print("Debug - Controller hazır, pozisyon ayarlamayı deneyeceğiz");
+          Log.d("DBG",
+              "Debug - Controller hazır, pozisyon ayarlamayı deneyeceğiz");
           _startSeekAttempts(_initialSeekPosition!);
         }
       });
@@ -464,7 +465,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           // Video oynamaya başladığında ve henüz pozisyon ayarlanmadıysa
           // pozisyonu ayarlamayı deneyelim
           if (!_seekAttemptsStarted) {
-            print(
+            Log.d("DBG",
                 "Debug - Video oynamaya başladı, pozisyon ayarlamayı deneyeceğiz");
             _startSeekAttempts(_initialSeekPosition!);
           }
@@ -478,8 +479,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // İzleme geçmişine ekle (başlangıç kaydı)
       _addToWatchHistory();
     } catch (e) {
-      print('Debug - Hata oluştu: $e');
-      print('Debug - Hata türü: ${e.runtimeType}');
+      Log.d("DBG", 'Debug - Hata oluştu: $e');
+      Log.d("DBG", 'Debug - Hata türü: ${e.runtimeType}');
       setState(() {
         _hasError = true;
         _errorMessage = 'Video oynatıcı başlatılamadı: ${e.toString()}';
@@ -561,7 +562,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _currentSubtitleId = -1;
       });
     } catch (e) {
-      print('Altyazılar yüklenirken hata: $e');
+      Log.d("DBG", 'Altyazılar yüklenirken hata: $e');
     }
   }
 
@@ -574,7 +575,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       });
       _startHideControlsTimer();
     } catch (e) {
-      print('Altyazı seçilirken hata: $e');
+      Log.d("DBG", 'Altyazı seçilirken hata: $e');
     }
   }
 
@@ -637,14 +638,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     try {
       if (_controller == null || !mounted) {
-        print(
+        Log.d("DBG",
             "Debug - Deneme $_seekAttemptCount: Controller yok veya widget artık mounted değil");
         return;
       }
 
       // Eğer oynatma henüz başlamamışsa başlat
       if (!_controller!.value.isPlaying && !_controller!.value.isBuffering) {
-        print(
+        Log.d("DBG",
             "Debug - Deneme $_seekAttemptCount: Video oynamıyor, oynatmayı başlatıyorum");
         await _controller!.play();
 
@@ -656,12 +657,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
       // Eğer zaten istenen pozisyonda veya daha ilerideyse, işlem yapmaya gerek yok
       if (currentPos >= position - 5) {
-        print(
+        Log.d("DBG",
             "Debug - Deneme $_seekAttemptCount: Zaten doğru pozisyona yakın (Şu anki: $currentPos, Hedef: $position)");
         return;
       }
-
-      print(
+      Log.d("DBG",
           "Debug - Deneme $_seekAttemptCount: Video $position saniyeye ilerletiliyor (Şu anki: $currentPos)");
 
       // Önce videoyu duraklat
@@ -677,12 +677,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // Son pozisyonu kontrol et
       await Future.delayed(const Duration(milliseconds: 700));
       final newPos = _controller!.value.position.inSeconds;
-      print(
+      Log.d("DBG",
           "Debug - Deneme $_seekAttemptCount: Pozisyon ayarlama sonrası: $newPos");
 
       // Eğer pozisyon değişmediyse, farklı bir yöntem dene (agresif yöntem)
       if (newPos < 3 || (newPos - currentPos).abs() < 3) {
-        print(
+        Log.d("DBG",
             "Debug - Deneme $_seekAttemptCount: Pozisyon değişmedi, farklı yöntem deneniyor");
 
         // MediaPlayer'ı doğrudan al ve time ayarla (VLC Player native API)
@@ -690,7 +690,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         // await _controller!.setTime(position * 1000); // milisaniye cinsinden
       }
     } catch (e) {
-      print("Debug - Deneme $_seekAttemptCount sırasında hata: $e");
+      Log.d("DBG", "Debug - Deneme $_seekAttemptCount sırasında hata: $e");
     }
   }
 
@@ -722,9 +722,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _audioTracks = tracks;
         _currentAudioId = tracks.keys.isNotEmpty ? tracks.keys.first : null;
       });
-      if (kDebugMode) print('Audio tracks: $tracks');
+      Log.d('DBG', 'Audio tracks: $tracks');
     } catch (e) {
-      print('Audio track fetch error: $e');
+      Log.d("DBG", 'Audio track fetch error: $e');
     }
   }
 
@@ -1270,7 +1270,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _availableSubtitles = tracks;
         });
       } catch (e) {
-        print('Subtitles fetch error: $e');
+        Log.d("DBG", 'Subtitles fetch error: $e');
       }
     }
 
@@ -1278,7 +1278,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       -1: 'Kapalı',
       ..._availableSubtitles,
     };
-    print(_availableSubtitles);
+    Log.d("DBG", _availableSubtitles.toString());
     showDialog(
       context: context,
       builder: (context) => AlertDialog(

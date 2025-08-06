@@ -124,7 +124,7 @@ class _SingleTabState extends State<SingleTab> {
     _controller.addOnRendererEventListener((type, id, name) {
       // ignore: prefer_early_return
       if (!kReleaseMode) {
-        debugPrint('OnRendererEventListener $type $id $name');
+        Log.d("DBG", 'OnRendererEventListener $type $id $name');
       }
     });
   }

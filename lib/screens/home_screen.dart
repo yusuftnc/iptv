@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:iptv_app/utils/logger.dart';
 import '../models/content_item.dart';
 import '../services/iptv_service.dart';
 import '../services/storage_service.dart';
@@ -128,8 +129,7 @@ class _HomeScreenState extends State<HomeScreen> {
               .toList();
           break;
       }
-
-      print(
+      Log.d("DBG",
           'Debug - Loaded content for category $categoryId: ${content.length} items');
 
       if (mounted) {
@@ -139,7 +139,7 @@ class _HomeScreenState extends State<HomeScreen> {
         });
       }
     } catch (e) {
-      print('Debug - Error loading category content: $e');
+      Log.d("DBG", 'Debug - Error loading category content: $e');
       if (mounted) {
         setState(() {
           _errorMessage = 'İçerik yüklenirken bir hata oluştu: ${e.toString()}';
@@ -561,17 +561,18 @@ class _HomeScreenState extends State<HomeScreen> {
             child: InkWell(
               onTap: () async {
                 try {
-                  print('Debug - Content item: $item');
-                  print('Debug - Current content type: $_currentContentType');
+                  Log.d("DBG", 'Debug - Content item: $item');
+                  Log.d("DBG",
+                      'Debug - Current content type: $_currentContentType');
                   final contentId = _currentContentType == 'live'
                       ? item['stream_id'].toString()
                       : _currentContentType == 'movie'
                           ? item['stream_id'].toString()
                           : item['series_id'].toString();
-                  print('Debug - Content ID: $contentId');
+                  Log.d("DBG", 'Debug - Content ID: $contentId');
 
                   if (_currentContentType == 'series') {
-                    print('Debug - Series ID: ${item['series_id']}');
+                    Log.d("DBG", 'Debug - Series ID: ${item['series_id']}');
                     Navigator.push(
                       context,
                       MaterialPageRoute(
@@ -587,7 +588,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     streamId: contentId,
                     streamType: _currentContentType,
                   );
-                  print('Debug - Stream URL: $streamUrl');
+                  Log.d("DBG", 'Debug - Stream URL: $streamUrl');
 
                   if (streamUrl != null && mounted) {
                     _playContent(contentId, streamUrl, _currentContentType);
@@ -600,7 +601,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     );
                   }
                 } catch (e) {
-                  print('Debug - Error getting stream URL: $e');
+                  Log.d("DBG", 'Debug - Error getting stream URL: $e');
                   if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(

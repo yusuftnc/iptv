@@ -4,6 +4,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import 'package:dio/dio.dart';
 import '../models/movie_details.dart';
 import 'package:flutter/foundation.dart';
+import '../utils/logger.dart';
 
 class IptvService {
   String? _host;
@@ -29,7 +30,7 @@ class IptvService {
       '{server}/live/{user}/{pass}/{id}.m3u8',
       '{server}/streaming/live/{id}?username={user}&password={pass}',
       '{server}/hls/{user}/{pass}/{id}/index.m3u8',
-      '{server}/{user}/{pass}/{id}'
+      '{server}/{user}/{pass}/{id}',
     ],
     'movie': [
       '{server}/movie/{user}/{pass}/{id}.mkv',
@@ -40,7 +41,7 @@ class IptvService {
       '{server}/film/{user}/{pass}/{id}.mp4',
       '{server}/film/{user}/{pass}/{id}.mkv',
       '{server}/streaming/vod/{id}?username={user}&password={pass}',
-      '{server}/{user}/{pass}/{id}'
+      '{server}/{user}/{pass}/{id}',
     ],
     'series': [
       '{server}/series/{user}/{pass}/{id}.mp4',
@@ -57,19 +58,21 @@ class IptvService {
       '{server}/player_api.php?username={user}&password={pass}&action=get_series_info&series_id={id}',
       '{server}/vod/{user}/{pass}/{id}.mp4',
       '{server}/vod/{user}/{pass}/{id}.mkv',
-      '{server}/{user}/{pass}/{id}'
-    ]
+      '{server}/{user}/{pass}/{id}',
+    ],
   };
 
   // Singleton pattern
   static final IptvService _instance = IptvService._internal();
   factory IptvService() => _instance;
   IptvService._internal() {
-    _dio = Dio(BaseOptions(
-      connectTimeout: const Duration(seconds: 30),
-      receiveTimeout: const Duration(seconds: 30),
-      sendTimeout: const Duration(seconds: 30),
-    ));
+    _dio = Dio(
+      BaseOptions(
+        connectTimeout: const Duration(seconds: 30),
+        receiveTimeout: const Duration(seconds: 30),
+        sendTimeout: const Duration(seconds: 30),
+      ),
+    );
   }
 
   // Getter metodları
@@ -104,13 +107,13 @@ class IptvService {
       for (var category in [
         ...liveCategories,
         ...movieCategories,
-        ...seriesCategories
+        ...seriesCategories,
       ]) {
         _categoryNames[category['category_id'].toString()] =
             category['category_name'];
       }
     } catch (e) {
-      print('Load categories error: $e');
+      Log.d("DBG", 'Load categories error: $e');
     }
   }
 
@@ -133,7 +136,7 @@ class IptvService {
       }
       return [];
     } catch (e) {
-      print('Get Live Categories error: $e');
+      Log.d("DBG", 'Get Live Categories error: $e');
       return [];
     }
   }
@@ -157,7 +160,7 @@ class IptvService {
       }
       return [];
     } catch (e) {
-      print('Get Movie Categories error: $e');
+      Log.d("DBG", 'Get Movie Categories error: $e');
       return [];
     }
   }
@@ -181,25 +184,19 @@ class IptvService {
       }
       return [];
     } catch (e) {
-      print('Get Series Categories error: $e');
+      Log.d("DBG", 'Get Series Categories error: $e');
       return [];
     }
   }
 
   Future<bool> login() async {
     try {
-      if (kDebugMode) print('Debug - Attempting login with URL: $_serverUrl');
+      Log.d('DBG', 'Debug - Attempting login with URL: $_serverUrl');
       final response = await _dio.get(
         '$_serverUrl/player_api.php',
-        queryParameters: {
-          'username': _username,
-          'password': _password,
-        },
+        queryParameters: {'username': _username, 'password': _password},
         options: Options(
-          headers: {
-            'User-Agent': 'Mozilla/5.0',
-            'Accept': 'application/json',
-          },
+          headers: {'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json'},
           validateStatus: (status) => status! < 500,
           receiveTimeout: const Duration(seconds: 30),
           sendTimeout: const Duration(seconds: 30),
@@ -207,42 +204,47 @@ class IptvService {
       );
 
       if (kDebugMode)
-        print('Debug - Login response status: ${response.statusCode}');
-      if (kDebugMode) print('Debug - Login response data: ${response.data}');
+        Log.d("DBG", 'Debug - Login response status: ${response.statusCode}');
+      Log.d('DBG', 'Debug - Login response data: ${response.data}');
 
       if (response.statusCode == 200) {
         final data = response.data;
         if (data is Map<String, dynamic>) {
-          if (kDebugMode) print('Debug - Login successful, user info received');
+          Log.d('DBG', 'Debug - Login successful, user info received');
           _userInfo = data;
           _isLoggedIn = true;
           return true;
         } else {
           if (kDebugMode)
-            print('Debug - Login failed: Response data is not a Map');
+            Log.d("DBG", 'Debug - Login failed: Response data is not a Map');
           return false;
         }
       }
       if (kDebugMode)
-        print('Debug - Login failed: Status code ${response.statusCode}');
+        Log.d(
+          "DBG",
+          'Debug - Login failed: Status code ${response.statusCode}',
+        );
       return false;
     } on DioException catch (e) {
-      if (kDebugMode) print('Debug - Login DioException: ${e.message}');
-      if (kDebugMode) print('Debug - DioException type: ${e.type}');
+      Log.d('DBG', 'Debug - Login DioException: ${e.message}');
+      Log.d('DBG', 'Debug - DioException type: ${e.type}');
       if (kDebugMode)
-        print('Debug - DioException response: ${e.response?.data}');
+        Log.d("DBG", 'Debug - DioException response: ${e.response?.data}');
 
       if (e.type == DioExceptionType.connectionTimeout ||
           e.type == DioExceptionType.receiveTimeout) {
         throw Exception(
-            'Bağlantı zaman aşımına uğradı. Lütfen internet bağlantınızı kontrol edin.');
+          'Bağlantı zaman aşımına uğradı. Lütfen internet bağlantınızı kontrol edin.',
+        );
       } else if (e.type == DioExceptionType.connectionError) {
         throw Exception(
-            'Sunucuya bağlanılamıyor. Lütfen internet bağlantınızı kontrol edin.');
+          'Sunucuya bağlanılamıyor. Lütfen internet bağlantınızı kontrol edin.',
+        );
       }
       throw Exception('Login failed: ${e.message}');
     } catch (e) {
-      if (kDebugMode) print('Debug - Unexpected login error: $e');
+      Log.d('DBG', 'Debug - Unexpected login error: $e');
       throw Exception('Beklenmeyen bir hata oluştu: $e');
     }
   }
@@ -253,11 +255,14 @@ class IptvService {
     }
 
     try {
-      final response = await http.get(
-        Uri.parse(
-            '$_serverUrl/player_api.php?username=$_username&password=$_password&action=get_live_categories'),
-        headers: {'Content-Type': 'application/json'},
-      ).timeout(const Duration(seconds: 10));
+      final response = await http
+          .get(
+            Uri.parse(
+              '$_serverUrl/player_api.php?username=$_username&password=$_password&action=get_live_categories',
+            ),
+            headers: {'Content-Type': 'application/json'},
+          )
+          .timeout(const Duration(seconds: 10));
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -272,7 +277,7 @@ class IptvService {
   Future<List<Map<String, dynamic>>> getChannels(String categoryId) async {
     try {
       if (kDebugMode)
-        print('Debug - Getting channels for category: $categoryId');
+        Log.d("DBG", 'Debug - Getting channels for category: $categoryId');
       final uri = Uri.parse('$_serverUrl/player_api.php').replace(
         queryParameters: {
           'username': _username,
@@ -282,10 +287,10 @@ class IptvService {
         },
       );
 
-      if (kDebugMode) print('Debug - Request URL: ${uri.toString()}');
+      Log.d('DBG', 'Debug - Request URL: ${uri.toString()}');
       final response = await http.get(uri).timeout(const Duration(seconds: 30));
-      if (kDebugMode) print('Debug - Response status: ${response.statusCode}');
-      if (kDebugMode) print('Debug - Response body: ${response.body}');
+      Log.d('DBG', 'Debug - Response status: ${response.statusCode}');
+      Log.d('DBG', 'Debug - Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -295,7 +300,7 @@ class IptvService {
       }
       return [];
     } catch (e) {
-      print('Debug - Get Live TV error: $e');
+      Log.d("DBG", 'Debug - Get Live TV error: $e');
       return [];
     }
   }
@@ -316,11 +321,11 @@ class IptvService {
       final ok = await _urlWorks(url);
       if (ok) {
         if (kDebugMode)
-          debugPrint('Debug - Önbellekteki format çalışıyor: $url');
+          Log.d("DBG", 'Debug - Önbellekteki format çalışıyor: $url');
         return url;
       } else {
         if (kDebugMode)
-          debugPrint('Debug - Önbellekteki format çalışmıyor, temizleniyor');
+          Log.d("DBG", 'Debug - Önbellekteki format çalışmıyor, temizleniyor');
         _formatCache.remove(streamType);
       }
     }
@@ -335,33 +340,39 @@ class IptvService {
           .replaceAll('{user}', _username!)
           .replaceAll('{pass}', _password!)
           .replaceAll('{id}', streamId);
-
-      print('Debug - Bilinmeyen içerik türü için varsayılan URL: $defaultUrl');
+      Log.d(
+        "DBG",
+        'Debug - Bilinmeyen içerik türü için varsayılan URL: $defaultUrl',
+      );
       return defaultUrl;
     }
-
-    print('Debug - ${templates.length} format deneniyor...');
+    Log.d("DBG", 'Debug - ${templates.length} format deneniyor...');
 
     // Her formatı dene
     for (final template in templates) {
       final url = _applyTemplate(template, streamId, streamType);
 
-      debugPrint('Debug - Deneniyor: $url');
+      Log.d("DBG", 'Debug - Deneniyor: $url');
       final ok = await _urlWorks(url);
       if (ok) {
         _formatCache[streamType] = template; // çalışanı kaydet
-        debugPrint('Debug - Çalışan format bulundu ve önbelleğe alındı: $url');
+        Log.d(
+          "DBG",
+          'Debug - Çalışan format bulundu ve önbelleğe alındı: $url',
+        );
         return url;
       } else {
-        debugPrint('Debug - Format çalışmadı: $url');
+        Log.d("DBG", 'Debug - Format çalışmadı: $url');
       }
     }
 
     // Hiçbir format çalışmadıysa, varsayılan formatı döndür
     final defaultTemplate = templates.first;
     final defaultUrl = _applyTemplate(defaultTemplate, streamId, streamType);
-    print(
-        'Debug - Hiçbir format çalışmadı, varsayılan döndürülüyor: $defaultUrl');
+    Log.d(
+      "DBG",
+      'Debug - Hiçbir format çalışmadı, varsayılan döndürülüyor: $defaultUrl',
+    );
     return defaultUrl;
   }
 
@@ -378,10 +389,12 @@ class IptvService {
   // URL'in gerçekten çalışıp çalışmadığını küçük bir GET (Range: 0-0) isteğiyle kontrol et
   Future<bool> _urlWorks(String url) async {
     try {
-      final response = await http.get(
-        Uri.parse(url),
-        headers: const {'Range': 'bytes=0-0'}, // sadece ilk bayt
-      ).timeout(const Duration(seconds: 3));
+      final response = await http
+          .get(
+            Uri.parse(url),
+            headers: const {'Range': 'bytes=0-0'}, // sadece ilk bayt
+          )
+          .timeout(const Duration(seconds: 3));
 
       // Çoğu sunucu 200 (OK) ya da 206 (Partial Content) döndürür
       return response.statusCode == 200 || response.statusCode == 206;
@@ -409,7 +422,7 @@ class IptvService {
       }
       return [];
     } catch (e) {
-      print('Get Live TV error: $e');
+      Log.d("DBG", 'Get Live TV error: $e');
       return [];
     }
   }
@@ -417,7 +430,7 @@ class IptvService {
   // Filmleri getir
   Future<List<Map<String, dynamic>>> getMovies() async {
     try {
-      if (kDebugMode) print('Debug - Getting all movies');
+      Log.d('DBG', 'Debug - Getting all movies');
       final uri = Uri.parse('$_serverUrl/player_api.php').replace(
         queryParameters: {
           'username': _username,
@@ -426,10 +439,10 @@ class IptvService {
         },
       );
 
-      if (kDebugMode) print('Debug - Request URL: ${uri.toString()}');
+      Log.d('DBG', 'Debug - Request URL: ${uri.toString()}');
       final response = await http.get(uri).timeout(const Duration(seconds: 30));
-      if (kDebugMode) print('Debug - Response status: ${response.statusCode}');
-      if (kDebugMode) print('Debug - Response body: ${response.body}');
+      Log.d('DBG', 'Debug - Response status: ${response.statusCode}');
+      Log.d('DBG', 'Debug - Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -439,7 +452,7 @@ class IptvService {
       }
       return [];
     } catch (e) {
-      print('Debug - Get Movies error: $e');
+      Log.d("DBG", 'Debug - Get Movies error: $e');
       return [];
     }
   }
@@ -447,7 +460,7 @@ class IptvService {
   // Dizileri getir
   Future<List<Map<String, dynamic>>> getSeries() async {
     try {
-      if (kDebugMode) print('Debug - Getting all series');
+      Log.d('DBG', 'Debug - Getting all series');
       final uri = Uri.parse('$_serverUrl/player_api.php').replace(
         queryParameters: {
           'username': _username,
@@ -456,10 +469,10 @@ class IptvService {
         },
       );
 
-      if (kDebugMode) print('Debug - Request URL: ${uri.toString()}');
+      Log.d('DBG', 'Debug - Request URL: ${uri.toString()}');
       final response = await http.get(uri).timeout(const Duration(seconds: 30));
-      if (kDebugMode) print('Debug - Response status: ${response.statusCode}');
-      if (kDebugMode) print('Debug - Response body: ${response.body}');
+      Log.d('DBG', 'Debug - Response status: ${response.statusCode}');
+      Log.d('DBG', 'Debug - Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -469,7 +482,7 @@ class IptvService {
       }
       return [];
     } catch (e) {
-      print('Debug - Get Series error: $e');
+      Log.d("DBG", 'Debug - Get Series error: $e');
       return [];
     }
   }
@@ -491,9 +504,9 @@ class IptvService {
         },
       );
 
-      debugPrint('Debug - Response status: ${response.statusCode}');
-      debugPrint('Debug - HAM API YANITI:');
-      debugPrint(response.data.toString());
+      Log.d("DBG", 'Debug - Response status: ${response.statusCode}');
+      Log.d("DBG", 'Debug - HAM API YANITI:');
+      Log.d("DBG", response.data.toString());
 
       if (response.statusCode == 200) {
         final data = response.data;
@@ -517,15 +530,15 @@ class IptvService {
           'episodes': data['episodes'] ?? {},
         };
 
-        debugPrint('Debug - İşlenmiş dizi bilgileri:');
-        debugPrint(seriesInfo.toString());
+        Log.d("DBG", 'Debug - İşlenmiş dizi bilgileri:');
+        Log.d("DBG", seriesInfo.toString());
 
         return seriesInfo;
       } else {
         throw Exception('Failed to get series info: ${response.statusCode}');
       }
     } catch (e) {
-      debugPrint('Error getting series info: $e');
+      Log.d("DBG", 'Error getting series info: $e');
       rethrow;
     }
   }
@@ -533,12 +546,16 @@ class IptvService {
   // Film detaylarını getir
   Future<MovieDetails> getMovieInfo(String movieId) async {
     final url = Uri.parse('$_serverUrl/player_api.php');
-    final response = await http.get(url.replace(queryParameters: {
-      'username': _username,
-      'password': _password,
-      'action': 'get_vod_info',
-      'vod_id': movieId,
-    }));
+    final response = await http.get(
+      url.replace(
+        queryParameters: {
+          'username': _username,
+          'password': _password,
+          'action': 'get_vod_info',
+          'vod_id': movieId,
+        },
+      ),
+    );
 
     if (response.statusCode == 200) {
       final data = json.decode(response.body);
@@ -550,10 +567,11 @@ class IptvService {
 
   // Dizi bölümlerini getir
   Future<Map<String, List<Map<String, dynamic>>>> getSeriesEpisodes(
-      String seriesId) async {
+    String seriesId,
+  ) async {
     try {
       if (kDebugMode)
-        print('Debug - Getting episodes for series ID: $seriesId');
+        Log.d("DBG", 'Debug - Getting episodes for series ID: $seriesId');
       final uri = Uri.parse('$_serverUrl/player_api.php').replace(
         queryParameters: {
           'username': _username,
@@ -564,12 +582,14 @@ class IptvService {
       );
 
       if (kDebugMode)
-        print(
-            'Debug - Request URL: ${uri.toString().replaceAll(_password!, '****')}');
+        Log.d(
+          "DBG",
+          'Debug - Request URL: ${uri.toString().replaceAll(_password!, '****')}',
+        );
       final response = await http.get(uri).timeout(const Duration(seconds: 30));
-      if (kDebugMode) print('Debug - Response status: ${response.statusCode}');
-      if (kDebugMode) print('Debug - Response headers: ${response.headers}');
-      if (kDebugMode) print('Debug - Response body: ${response.body}');
+      Log.d('DBG', 'Debug - Response status: ${response.statusCode}');
+      Log.d('DBG', 'Debug - Response headers: ${response.headers}');
+      Log.d('DBG', 'Debug - Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final data = json.decode(response.body);
@@ -601,7 +621,7 @@ class IptvService {
       }
       return {};
     } catch (e) {
-      print('Get Series Episodes error: $e');
+      Log.d("DBG", 'Get Series Episodes error: $e');
       return {};
     }
   }
@@ -705,14 +725,16 @@ class IptvService {
         series: seriesResults,
       );
     } catch (e) {
-      print('Search error: $e');
+      Log.d("DBG", 'Search error: $e');
       return SearchResults(channels: [], movies: [], series: []);
     }
   }
 
   // Tarih sıralaması için yardımcı metod
   List<Map<String, dynamic>> _sortByDate(
-      List<Map<String, dynamic>> items, bool ascending) {
+    List<Map<String, dynamic>> items,
+    bool ascending,
+  ) {
     items.sort((a, b) {
       // Önce tarih alanını bul (added, releaseDate, last_modified vb.)
       String? dateFieldA;
@@ -759,7 +781,9 @@ class IptvService {
 
   // Sonuçları tarihe göre sırala
   Future<SearchResults> sortResultsByDate(
-      SearchResults results, bool ascending) async {
+    SearchResults results,
+    bool ascending,
+  ) async {
     return SearchResults(
       channels: _sortByDate(results.channels, ascending),
       movies: _sortByDate(results.movies, ascending),
@@ -769,7 +793,9 @@ class IptvService {
 
   // Sonuçları isme göre sırala
   Future<SearchResults> sortResultsByName(
-      SearchResults results, bool ascending) async {
+    SearchResults results,
+    bool ascending,
+  ) async {
     final sortFunction = (Map<String, dynamic> a, Map<String, dynamic> b) {
       final nameA = (a['name'] ?? '').toLowerCase();
       final nameB = (b['name'] ?? '').toLowerCase();
@@ -784,11 +810,7 @@ class IptvService {
     movies.sort((a, b) => sortFunction(a, b));
     series.sort((a, b) => sortFunction(a, b));
 
-    return SearchResults(
-      channels: channels,
-      movies: movies,
-      series: series,
-    );
+    return SearchResults(channels: channels, movies: movies, series: series);
   }
 
   // Yardımcı: Tarih alanını (added/last_modified/releaseDate) Unix time olarak döndür
@@ -808,10 +830,12 @@ class IptvService {
   // Yardımcı: Listeyi eklenme zamanına göre (desc) sırala
   List<Map<String, dynamic>> _sortByAddedDesc(List<Map<String, dynamic>> list) {
     list.sort((a, b) {
-      final tsB =
-          _parseTimestamp(b['added'] ?? b['last_modified'] ?? b['releaseDate']);
-      final tsA =
-          _parseTimestamp(a['added'] ?? a['last_modified'] ?? a['releaseDate']);
+      final tsB = _parseTimestamp(
+        b['added'] ?? b['last_modified'] ?? b['releaseDate'],
+      );
+      final tsA = _parseTimestamp(
+        a['added'] ?? a['last_modified'] ?? a['releaseDate'],
+      );
       return tsB.compareTo(tsA);
     });
     return list;
@@ -823,10 +847,12 @@ class IptvService {
     final sorted = _sortByAddedDesc(movies);
     final latest = sorted.take(limit).toList();
 
-    debugPrint('--- Son $limit Film ---');
+    Log.d("DBG", '--- Son $limit Film ---');
     for (final item in latest) {
-      debugPrint(
-          '${item['name']} | added: ${item['added']} | last_modified: ${item['last_modified']} | releaseDate: ${item['releaseDate'] ?? item['releasedate']}');
+      Log.d(
+        "DBG",
+        '${item['name']} | added: ${item['added']} | last_modified: ${item['last_modified']} | releaseDate: ${item['releaseDate'] ?? item['releasedate']}',
+      );
     }
 
     return latest;

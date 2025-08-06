@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
+import 'package:iptv_app/utils/logger.dart';
 import '../models/content_item.dart';
 import '../services/iptv_service.dart';
 import '../services/storage_service.dart';
@@ -53,7 +54,7 @@ class _SearchScreenState extends State<SearchScreen> {
         _searchHistory = history;
       });
     } catch (e) {
-      print('Arama geçmişi yüklenirken hata: $e');
+      Log.d("DBG", 'Arama geçmişi yüklenirken hata: $e');
     }
   }
 
