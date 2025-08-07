@@ -1043,12 +1043,15 @@ class _HomeScreenState extends State<HomeScreen> {
           final h = items[index];
           final iconUrl = h.streamIcon;
           final name = h.name ?? '';
+          assert(h.historyId != null,
+              'historyId null olmamalı; geçmişi temizleyin');
           final contentItem = ContentItem(
-            id: h.contentId,
+            id: h.historyId!,
             name: name,
             streamIcon: iconUrl,
             streamType: type,
             streamUrl: h.streamUrl,
+            historyId: h.historyId!,
           );
           return SizedBox(
             width: 130,

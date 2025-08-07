@@ -2,6 +2,7 @@ class ContentItem {
   final String id;
   final String name;
   final String? streamType; // 'live', 'movie', 'series'
+  final String? historyId; // watchHistory'de kullanılacak id (opsiyonel)
   final String? streamIcon;
   final String? streamUrl;
   final String? description;
@@ -19,26 +20,32 @@ class ContentItem {
     this.category,
     this.position,
     this.duration,
+    this.historyId,
   });
 
   factory ContentItem.fromJson(Map<String, dynamic> json, [String? type]) {
     final contentType = type ?? json['stream_type']?.toString();
-    final id = contentType == 'series' 
+    final id = contentType == 'series'
         ? json['series_id']?.toString() ?? json['stream_id']?.toString() ?? ''
         : json['stream_id']?.toString() ?? '';
-        
+
     return ContentItem(
       id: id,
       name: json['name']?.toString() ?? '',
       streamType: contentType,
-      streamIcon: contentType == 'series' 
-          ? json['cover'] ?? '' 
+      streamIcon: contentType == 'series'
+          ? json['cover'] ?? ''
           : json['stream_icon'] ?? '',
       streamUrl: json['stream_url']?.toString(),
       description: json['description'] ?? json['plot'] ?? '',
       category: json['category_id']?.toString() ?? '',
-      position: json['position'] != null ? int.tryParse(json['position'].toString()) : null,
-      duration: json['duration'] != null ? int.tryParse(json['duration'].toString()) : null,
+      position: json['position'] != null
+          ? int.tryParse(json['position'].toString())
+          : null,
+      duration: json['duration'] != null
+          ? int.tryParse(json['duration'].toString())
+          : null,
+      historyId: json['history_id']?.toString(),
     );
   }
 
@@ -50,6 +57,7 @@ class ContentItem {
       'stream_type': streamType,
       'position': position,
       'duration': duration,
+      if (historyId != null) 'history_id': historyId,
     };
   }
-} 
+}

@@ -1,9 +1,11 @@
+import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import 'package:iptv_app/utils/logger.dart';
 import '../models/favorite_item.dart';
 import '../models/watch_history.dart';
 import '../models/user_settings.dart';
 import '../models/content_item.dart';
+import 'dart:convert'; // Added for jsonEncode
 
 class DatabaseService {
   static const String _favoritesBox = 'favorites';
@@ -57,6 +59,12 @@ class DatabaseService {
     final List<WatchHistory> history = box.values.toList();
     // En son izlenenler en üstte olacak şekilde sırala
     history.sort((a, b) => b.watchDate.compareTo(a.watchDate));
+
+    for (var item in history) {
+      print(
+          'WatchHistory: {contentId: ${item.contentId}, name: ${item.name}, streamType: ${item.streamType}, streamIcon: ${item.streamIcon}, watchDate: ${item.watchDate}, position: ${item.position}, duration: ${item.duration}, streamUrl: ${item.streamUrl}, category: ${item.category}, historyId: ${item.historyId}}');
+    }
+
     return history;
   }
 
@@ -75,10 +83,13 @@ class DatabaseService {
         duration: contentItem.duration,
         streamUrl: contentItem.streamUrl,
         category: contentItem.category,
+        historyId: contentItem.historyId ?? contentItem.id,
       );
 
       // Aynı içerik zaten varsa güncelle
-      await box.put(contentItem.id, watchItem);
+      // series/movie/channel devam anahtarı olarak historyId varsa onu kullan, yoksa id
+      final key = contentItem.historyId ?? contentItem.id;
+      await box.put(key, watchItem);
 
       // Kaydettikten sonra kontrol et
       final savedItem = box.get(contentItem.id);

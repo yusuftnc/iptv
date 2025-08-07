@@ -78,13 +78,19 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen> {
   }
 
   void _playContent(WatchHistory item) {
+    // 1) Detay ekranları için her zaman historyId kullan
+    assert(
+        item.historyId != null, 'historyId null olmamalı; geçmişi temizleyin');
+
     final contentItem = ContentItem(
-      id: item.contentId,
+      id: item.historyId!,
       name: item.name,
       streamUrl: item.streamUrl,
       streamType: item.streamType,
       position: item.position,
       duration: item.duration,
+      streamIcon: item.streamIcon,
+      historyId: item.historyId!,
     );
 
     if (item.streamType == 'series') {
@@ -99,7 +105,8 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen> {
         context,
         MaterialPageRoute(
           builder: (context) => PlayerScreen(
-            contentId: item.contentId,
+            contentId: item.contentId, // gerçek oynatılacak akış
+            historyId: item.historyId!, // kayıt anahtarı
             streamUrl: item.streamUrl ?? '',
             contentType: item.streamType ?? 'movie',
             name: item.name ?? '',

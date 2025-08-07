@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/content_item.dart';
+import '../models/watch_history.dart';
 import '../services/iptv_service.dart';
 import '../services/database_service.dart';
 import 'player_screen.dart';
@@ -23,6 +24,8 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   bool _isLoading = true;
   String _errorMessage = '';
   bool _isFavorite = false;
+  // Devam Et butonu için
+  WatchHistory? _resumeHistory;
 
   // Dizi bilgileri
   Map<String, dynamic> _seriesInfo = {};
@@ -35,6 +38,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     super.initState();
     _loadSeriesDetails();
     _checkIfFavorite();
+    _checkResumeHistory();
   }
 
   Future<void> _checkIfFavorite() async {
@@ -92,6 +96,16 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     }
   }
 
+  Future<void> _checkResumeHistory() async {
+    final history =
+        await _databaseService.getWatchPosition(widget.seriesItem.id);
+    if (mounted) {
+      setState(() {
+        _resumeHistory = history;
+      });
+    }
+  }
+
   void _playEpisode(Map<String, dynamic> episode) {
     // Bölüm için ContentItem oluştur
     final episodeItem = ContentItem(
@@ -107,6 +121,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
               episode['container_extension'].toString().isNotEmpty
           ? '${_iptvService.getServerUrl()}/series/${_iptvService.getUsername()}/${_iptvService.getPassword()}/${episode['id']}.${episode['container_extension']}'
           : null,
+      historyId: widget.seriesItem.id,
     );
 
     // Oynatma ekranına git
@@ -115,10 +130,44 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) => PlayerScreen(
           contentId: episodeItem.id,
+          historyId: episodeItem.historyId,
           streamUrl: episodeItem.streamUrl ?? '',
           contentType: 'series',
           name: episodeItem.name,
           streamIcon: episodeItem.streamIcon,
+        ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 100),
+      ),
+    );
+  }
+
+  void _resumeLastEpisode() {
+    if (_resumeHistory == null) return;
+
+    final contentItem = ContentItem(
+      id: _resumeHistory!.contentId, // episode id o an oynanan bölüm
+      name: _resumeHistory!.name ?? widget.seriesItem.name,
+      streamType: 'series',
+      streamIcon: _resumeHistory!.streamIcon ?? widget.seriesItem.streamIcon,
+      streamUrl: _resumeHistory!.streamUrl,
+      position: _resumeHistory!.position,
+      duration: _resumeHistory!.duration,
+      historyId: widget.seriesItem.id,
+    );
+
+    Navigator.push(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => PlayerScreen(
+          contentId: contentItem.id,
+          historyId: contentItem.historyId,
+          streamUrl: contentItem.streamUrl ?? '',
+          contentType: 'series',
+          name: contentItem.name,
+          streamIcon: contentItem.streamIcon,
         ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(opacity: animation, child: child);
@@ -240,12 +289,18 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
           // Poster, Yıldızlar ve Tarih
           Column(
             children: [
-              if (widget.seriesItem.streamIcon != null &&
-                  widget.seriesItem.streamIcon!.isNotEmpty)
+              // Poster resmi: önce ContentItem.streamIcon, yoksa API'den gelen cover
+              if ((widget.seriesItem.streamIcon != null &&
+                      widget.seriesItem.streamIcon!.isNotEmpty) ||
+                  (_seriesInfo['cover'] != null &&
+                      _seriesInfo['cover'].toString().isNotEmpty))
                 ClipRRect(
                   borderRadius: BorderRadius.circular(8),
                   child: CachedNetworkImage(
-                    imageUrl: widget.seriesItem.streamIcon!,
+                    imageUrl: (widget.seriesItem.streamIcon != null &&
+                            widget.seriesItem.streamIcon!.isNotEmpty)
+                        ? widget.seriesItem.streamIcon!
+                        : _seriesInfo['cover'],
                     width: 120,
                     height: 180,
                     fit: BoxFit.cover,
@@ -379,32 +434,53 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     return Container(
       height: 50,
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: ListView.builder(
-        scrollDirection: Axis.horizontal,
-        itemCount: _seasons.length,
-        itemBuilder: (context, index) {
-          final season = _seasons[index];
-          final isSelected = season == _selectedSeason;
-
-          return Padding(
-            padding: const EdgeInsets.only(right: 8),
-            child: ElevatedButton(
-              onPressed: () {
-                setState(() {
-                  _selectedSeason = season;
-                });
-              },
+      child: Row(
+        children: [
+          if (_resumeHistory != null) ...[
+            ElevatedButton(
+              onPressed: _resumeLastEpisode,
               style: ElevatedButton.styleFrom(
-                backgroundColor: isSelected ? Colors.blue : Colors.grey[800],
+                backgroundColor: Colors.green,
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(20),
+                  borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              child: Text('Sezon ${int.parse(season)}'),
+              child: const Text('Devam Et'),
             ),
-          );
-        },
+            const SizedBox(width: 8),
+          ],
+          Expanded(
+            child: ListView.builder(
+              scrollDirection: Axis.horizontal,
+              itemCount: _seasons.length,
+              itemBuilder: (context, index) {
+                final season = _seasons[index];
+                final isSelected = season == _selectedSeason;
+
+                return Padding(
+                  padding: const EdgeInsets.only(right: 8),
+                  child: ElevatedButton(
+                    onPressed: () {
+                      setState(() {
+                        _selectedSeason = season;
+                      });
+                    },
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor:
+                          isSelected ? Colors.blue : Colors.grey[800],
+                      foregroundColor: Colors.white,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                    ),
+                    child: Text('Sezon $season'),
+                  ),
+                );
+              },
+            ),
+          ),
+        ],
       ),
     );
   }

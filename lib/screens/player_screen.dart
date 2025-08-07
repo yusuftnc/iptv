@@ -15,6 +15,8 @@ class PlayerScreen extends StatefulWidget {
   final String contentType;
   final String name;
   final String? streamIcon;
+  final String?
+      historyId; // id to use for watch history when different from contentId
 
   const PlayerScreen({
     Key? key,
@@ -23,6 +25,7 @@ class PlayerScreen extends StatefulWidget {
     required this.contentType,
     this.name = '',
     this.streamIcon,
+    this.historyId,
   }) : super(key: key);
 
   @override
@@ -61,6 +64,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   bool _shouldSeekToInitialPosition = false;
   int _seekAttemptCount = 0;
   final int _maxSeekAttempts = 5;
+
+  // Convenience getter for the id we store in watch history
+  String get _historyId => widget.historyId ?? widget.contentId;
 
   void _cancelSeekAttempts() {
     // Gelecekteki denemeleri engelle
@@ -140,6 +146,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         streamUrl: widget.streamUrl,
         streamType: widget.contentType,
         streamIcon: widget.streamIcon,
+        historyId: _historyId,
       ));
       Log.d("DBG", "Debug - İzleme geçmişine eklendi");
     } catch (e) {
@@ -165,13 +172,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
           streamIcon: widget.streamIcon,
           position: _currentPosition.inSeconds,
           duration: _totalDuration.inSeconds,
+          historyId: _historyId,
         );
 
         await _databaseService.addToWatchHistory(contentItem);
 
         // Veritabanına kaydedilen pozisyonu doğrula
         final savedPosition =
-            await _databaseService.getWatchPosition(widget.contentId);
+            await _databaseService.getWatchPosition(_historyId);
         Log.d("DBG",
             "Debug - Kaydedilen pozisyon kontrolü: ${savedPosition?.position} / ${savedPosition?.duration}");
         Log.d("DBG", "Debug - İzleme pozisyonu güncellendi");
@@ -189,8 +197,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     try {
       Log.d("DBG",
           "Debug - İzleme pozisyonu kontrol ediliyor: ${widget.contentId}");
-      final watchHistory =
-          await _databaseService.getWatchPosition(widget.contentId);
+      final watchHistory = await _databaseService.getWatchPosition(_historyId);
       Log.d("DBG",
           "Debug - Alınan izleme geçmişi: ${watchHistory?.position} / ${watchHistory?.duration}");
       Log.d("DBG",
@@ -224,6 +231,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       streamIcon: widget.streamIcon,
                       position: 0,
                       duration: watchHistory.duration,
+                      historyId: _historyId,
                     ));
                     Navigator.pop(context, false);
                   },
@@ -378,8 +386,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // İlk önce izleme pozisyonunu al
       Log.d("DBG",
           "Debug - Video yüklenmeden önce izleme pozisyonu kontrol ediliyor.");
-      final watchHistory =
-          await _databaseService.getWatchPosition(widget.contentId);
+      final watchHistory = await _databaseService.getWatchPosition(_historyId);
       Log.d("DBG",
           "Debug - İzleme geçmişi: ${watchHistory?.position} / ${watchHistory?.duration}");
 

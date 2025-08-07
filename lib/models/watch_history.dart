@@ -6,31 +6,35 @@ part 'watch_history.g.dart';
 class WatchHistory extends HiveObject {
   @HiveField(0)
   late String contentId;
-  
+
   @HiveField(1)
   late String name;
-  
+
   @HiveField(2)
   late String streamType; // 'live', 'movie', 'series'
-  
+
   @HiveField(3)
   String? streamIcon;
-  
+
   @HiveField(4)
   DateTime watchDate = DateTime.now();
-  
+
   @HiveField(5)
   int? position; // İzleme pozisyonu (saniye cinsinden)
-  
+
   @HiveField(6)
   int? duration; // Toplam süre (saniye cinsinden)
-  
+
   @HiveField(7)
   String? streamUrl;
-  
+
   @HiveField(8)
   String? category;
-  
+
+  // İzleme geçmişi anahtarı (dizi id'si vb.)
+  @HiveField(9)
+  String? historyId;
+
   WatchHistory({
     required this.contentId,
     required this.name,
@@ -40,5 +44,6 @@ class WatchHistory extends HiveObject {
     this.duration,
     this.streamUrl,
     this.category,
+    this.historyId,
   });
-} 
+}
