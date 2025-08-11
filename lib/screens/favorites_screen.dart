@@ -5,6 +5,7 @@ import '../models/favorite_item.dart';
 import '../services/database_service.dart';
 import 'player_screen.dart';
 import 'series_detail_screen.dart';
+import '../services/iptv_service.dart';
 
 class FavoritesScreen extends StatefulWidget {
   const FavoritesScreen({super.key});
@@ -51,7 +52,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
     return _favorites.where((item) => item.streamType == type).toList();
   }
 
-  void _playContent(FavoriteItem item) {
+  Future<void> _playContent(FavoriteItem item) async {
     final contentItem = ContentItem(
       id: item.id,
       name: item.name,
@@ -60,6 +61,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
       streamIcon: item.streamIcon,
       description: item.description,
       category: item.category,
+      historyId: item.id,
     );
 
     if (item.streamType == 'series') {
@@ -70,15 +72,24 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
         ),
       );
     } else {
+      final IptvService _iptv = IptvService();
+      String url = item.streamUrl ?? '';
+      if (url.isEmpty) {
+        url = await _iptv.getStreamUrl(
+                streamId: item.id, streamType: item.streamType ?? 'movie') ??
+            '';
+      }
+
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => PlayerScreen(
             contentId: item.id,
-            streamUrl: item.streamUrl ?? '',
-            contentType: item.streamType ?? 'movie',
+            streamUrl: url,
+            contentType: item.streamType,
             name: item.name,
             streamIcon: item.streamIcon,
+            historyId: item.id,
           ),
         ),
       );

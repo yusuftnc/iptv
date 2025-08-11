@@ -2,7 +2,7 @@ class ContentItem {
   final String id;
   final String name;
   final String? streamType; // 'live', 'movie', 'series'
-  final String? historyId; // watchHistory'de kullanılacak id (opsiyonel)
+  final String historyId; // watchHistory'de kullanılacak ana id
   final String? streamIcon;
   final String? streamUrl;
   final String? description;
@@ -20,7 +20,7 @@ class ContentItem {
     this.category,
     this.position,
     this.duration,
-    this.historyId,
+    required this.historyId,
   });
 
   factory ContentItem.fromJson(Map<String, dynamic> json, [String? type]) {
@@ -45,7 +45,10 @@ class ContentItem {
       duration: json['duration'] != null
           ? int.tryParse(json['duration'].toString())
           : null,
-      historyId: json['history_id']?.toString(),
+      historyId: json['history_id']?.toString() ??
+          (json['series_id']?.toString() ??
+              json['stream_id']?.toString() ??
+              ''),
     );
   }
 
@@ -57,7 +60,7 @@ class ContentItem {
       'stream_type': streamType,
       'position': position,
       'duration': duration,
-      if (historyId != null) 'history_id': historyId,
+      'history_id': historyId,
     };
   }
 }

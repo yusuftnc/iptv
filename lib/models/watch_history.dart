@@ -33,7 +33,7 @@ class WatchHistory extends HiveObject {
 
   // İzleme geçmişi anahtarı (dizi id'si vb.)
   @HiveField(9)
-  String? historyId;
+  late String historyId;
 
   WatchHistory({
     required this.contentId,
@@ -44,6 +44,6 @@ class WatchHistory extends HiveObject {
     this.duration,
     this.streamUrl,
     this.category,
-    this.historyId,
+    required this.historyId,
   });
 }

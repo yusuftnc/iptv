@@ -49,6 +49,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
         name: widget.movieDetails.name,
         streamIcon: widget.movieDetails.coverUrl,
         streamType: 'movie',
+        historyId: widget.contentId,
       );
       await _databaseService.addFavorite(contentItem);
     }
@@ -175,6 +176,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen> {
                 contentType: 'movie',
                 name: widget.movieDetails.name,
                 streamIcon: widget.movieDetails.coverUrl,
+                historyId: widget.contentId,
               ),
             ),
           );

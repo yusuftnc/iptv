@@ -154,15 +154,23 @@ class _SearchScreenState extends State<SearchScreen> {
         );
       } else {
         if (!mounted) return;
+        String url = contentItem.streamUrl ?? '';
+        if (url.isEmpty) {
+          url = await _iptvService.getStreamUrl(
+                  streamId: contentItem.id,
+                  streamType: contentItem.streamType ?? 'movie') ??
+              '';
+        }
         Navigator.push(
           context,
           MaterialPageRoute(
             builder: (context) => PlayerScreen(
               contentId: contentItem.id,
-              streamUrl: contentItem.streamUrl ?? '',
+              streamUrl: url,
               contentType: contentItem.streamType ?? 'movie',
               name: contentItem.name,
               streamIcon: contentItem.streamIcon,
+              historyId: contentItem.id,
             ),
           ),
         );

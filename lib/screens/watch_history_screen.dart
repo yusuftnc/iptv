@@ -4,6 +4,7 @@ import '../models/content_item.dart';
 import '../services/database_service.dart';
 import 'player_screen.dart';
 import 'series_detail_screen.dart';
+import '../services/iptv_service.dart';
 
 class WatchHistoryScreen extends StatefulWidget {
   const WatchHistoryScreen({super.key});
@@ -77,20 +78,17 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen> {
     _loadWatchHistory();
   }
 
-  void _playContent(WatchHistory item) {
+  Future<void> _playContent(WatchHistory item) async {
     // 1) Detay ekranları için her zaman historyId kullan
-    assert(
-        item.historyId != null, 'historyId null olmamalı; geçmişi temizleyin');
-
     final contentItem = ContentItem(
-      id: item.historyId!,
+      id: item.contentId,
       name: item.name,
       streamUrl: item.streamUrl,
       streamType: item.streamType,
       position: item.position,
       duration: item.duration,
       streamIcon: item.streamIcon,
-      historyId: item.historyId!,
+      historyId: item.historyId,
     );
 
     if (item.streamType == 'series') {
@@ -101,13 +99,22 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen> {
         ),
       ).then((_) => _loadWatchHistory());
     } else {
+      final IptvService _iptv = IptvService();
+      String url = item.streamUrl ?? '';
+      if (url.isEmpty) {
+        url = await _iptv.getStreamUrl(
+                streamId: item.contentId,
+                streamType: item.streamType ?? 'movie') ??
+            '';
+      }
+
       Navigator.push(
         context,
         MaterialPageRoute(
           builder: (context) => PlayerScreen(
             contentId: item.contentId, // gerçek oynatılacak akış
-            historyId: item.historyId!, // kayıt anahtarı
-            streamUrl: item.streamUrl ?? '',
+            historyId: item.historyId, // kayıt anahtarı
+            streamUrl: url,
             contentType: item.streamType ?? 'movie',
             name: item.name ?? '',
             streamIcon: item.streamIcon,

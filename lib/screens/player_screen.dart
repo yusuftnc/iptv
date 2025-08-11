@@ -7,7 +7,6 @@ import '../services/iptv_service.dart';
 import '../services/database_service.dart';
 import 'dart:async';
 import 'dart:math' show max;
-import 'package:flutter/foundation.dart';
 
 class PlayerScreen extends StatefulWidget {
   final String contentId;
@@ -15,8 +14,7 @@ class PlayerScreen extends StatefulWidget {
   final String contentType;
   final String name;
   final String? streamIcon;
-  final String?
-      historyId; // id to use for watch history when different from contentId
+  final String historyId;
 
   const PlayerScreen({
     Key? key,
@@ -25,7 +23,7 @@ class PlayerScreen extends StatefulWidget {
     required this.contentType,
     this.name = '',
     this.streamIcon,
-    this.historyId,
+    required this.historyId,
   }) : super(key: key);
 
   @override
@@ -65,8 +63,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   int _seekAttemptCount = 0;
   final int _maxSeekAttempts = 5;
 
-  // Convenience getter for the id we store in watch history
-  String get _historyId => widget.historyId ?? widget.contentId;
+  // İzleme geçmişi anahtarı
+  late final String _historyId;
 
   void _cancelSeekAttempts() {
     // Gelecekteki denemeleri engelle
@@ -80,6 +78,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   @override
   void initState() {
     super.initState();
+    _historyId = widget.historyId;
 
     // Tam ekran (landscape) modunu başlat ve kilidi açık (rotasyon kilitli)
     SystemChrome.setPreferredOrientations([
@@ -125,6 +124,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         streamUrl: widget.streamUrl,
         streamType: widget.contentType,
         streamIcon: widget.streamIcon,
+        historyId: _historyId,
       ));
     }
 
@@ -932,14 +932,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
             // Üst kontrol çubuğu - oryantasyona göre farklı görünümler
-            Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: controlPaddingHorizontal,
-                  vertical: controlPaddingVertical),
-              color: Colors.black54,
-              child: orientation == Orientation.portrait
-                  ? _buildPortraitTopControls() // Dikey mod
-                  : _buildLandscapeTopControls(), // Yatay mod
+            SafeArea(
+              bottom: false,
+              child: Container(
+                padding: const EdgeInsets.symmetric(
+                    horizontal: controlPaddingHorizontal,
+                    vertical: controlPaddingVertical),
+                color: Colors.black54,
+                child: orientation == Orientation.portrait
+                    ? _buildPortraitTopControls() // Dikey mod
+                    : _buildLandscapeTopControls(), // Yatay mod
+              ),
             ),
 
             // Orta alan - İleri/geri sarma butonları

@@ -83,12 +83,11 @@ class DatabaseService {
         duration: contentItem.duration,
         streamUrl: contentItem.streamUrl,
         category: contentItem.category,
-        historyId: contentItem.historyId ?? contentItem.id,
+        historyId: contentItem.historyId,
       );
 
-      // Aynı içerik zaten varsa güncelle
-      // series/movie/channel devam anahtarı olarak historyId varsa onu kullan, yoksa id
-      final key = contentItem.historyId ?? contentItem.id;
+      // Aynı içerik zaten varsa güncelle, key = historyId
+      final key = contentItem.historyId;
       await box.put(key, watchItem);
 
       // Kaydettikten sonra kontrol et

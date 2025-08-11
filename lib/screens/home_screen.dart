@@ -591,7 +591,14 @@ class _HomeScreenState extends State<HomeScreen> {
                   Log.d("DBG", 'Debug - Stream URL: $streamUrl');
 
                   if (streamUrl != null && mounted) {
-                    _playContent(contentId, streamUrl, _currentContentType);
+                    _playContent(
+                      contentId,
+                      streamUrl,
+                      _currentContentType,
+                      contentItem.name,
+                      contentItem.streamIcon ?? '',
+                      contentId,
+                    );
                   } else if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       const SnackBar(
@@ -690,7 +697,12 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _playContent(
-      String contentId, String streamUrl, String contentType) async {
+      String contentId,
+      String streamUrl,
+      String contentType,
+      String name,
+      String streamIcon,
+      String historyId) async {
     try {
       if (contentType == 'movie') {
         final movieDetails = await _iptvService.getMovieInfo(contentId);
@@ -715,8 +727,9 @@ class _HomeScreenState extends State<HomeScreen> {
               streamUrl: streamUrl,
               contentId: contentId,
               contentType: contentType,
-              name: contentId,
-              streamIcon: contentId,
+              name: name,
+              streamIcon: streamIcon,
+              historyId: historyId,
             ),
           ),
         );
@@ -1017,8 +1030,11 @@ class _HomeScreenState extends State<HomeScreen> {
           MaterialPageRoute(
             builder: (context) => PlayerScreen(
               contentId: contentItem.id,
-              streamUrl: streamUrl,
+              streamUrl: contentItem.streamUrl ?? '',
               contentType: type,
+              name: contentItem.name,
+              streamIcon: contentItem.streamIcon,
+              historyId: contentItem.historyId,
             ),
           ),
         );
@@ -1041,10 +1057,9 @@ class _HomeScreenState extends State<HomeScreen> {
         separatorBuilder: (_, __) => const SizedBox(width: 8),
         itemBuilder: (context, index) {
           final h = items[index];
+          if (h.historyId == null) return const SizedBox.shrink();
           final iconUrl = h.streamIcon;
           final name = h.name ?? '';
-          assert(h.historyId != null,
-              'historyId null olmamalı; geçmişi temizleyin');
           final contentItem = ContentItem(
             id: h.historyId!,
             name: name,

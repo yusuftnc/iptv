@@ -25,13 +25,14 @@ class WatchHistoryAdapter extends TypeAdapter<WatchHistory> {
       duration: fields[6] as int?,
       streamUrl: fields[7] as String?,
       category: fields[8] as String?,
+      historyId: fields[9] as String,
     )..watchDate = fields[4] as DateTime;
   }
 
   @override
   void write(BinaryWriter writer, WatchHistory obj) {
     writer
-      ..writeByte(9)
+      ..writeByte(10)
       ..writeByte(0)
       ..write(obj.contentId)
       ..writeByte(1)
@@ -49,7 +50,9 @@ class WatchHistoryAdapter extends TypeAdapter<WatchHistory> {
       ..writeByte(7)
       ..write(obj.streamUrl)
       ..writeByte(8)
-      ..write(obj.category);
+      ..write(obj.category)
+      ..writeByte(9)
+      ..write(obj.historyId);
   }
 
   @override
