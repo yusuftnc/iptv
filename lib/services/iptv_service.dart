@@ -80,17 +80,62 @@ class IptvService {
   String? getUsername() => _username;
   String? getPassword() => _password;
 
+  /// Host alanına `ray.example.com`, `http://ray.example.com` veya
+  /// `https://ray.example.com:8080` gibi değerler girilebilir; tek bir geçerli taban URL üretir.
+  static String normalizeServerBaseUrl(String hostInput, String portInput) {
+    var remainder = hostInput.trim();
+    String scheme = 'http';
+    if (remainder.toLowerCase().startsWith('https://')) {
+      scheme = 'https';
+      remainder = remainder.substring(8);
+    } else if (remainder.toLowerCase().startsWith('http://')) {
+      remainder = remainder.substring(7);
+    }
+    remainder = remainder.replaceAll(RegExp(r'/+$'), '');
+    if (remainder.isEmpty) {
+      throw ArgumentError('Sunucu adresi boş olamaz.');
+    }
+
+    String hostOnly = remainder;
+    String? portFromHost;
+    if (hostOnly.startsWith('[')) {
+      final close = hostOnly.indexOf(']');
+      if (close != -1 && close + 1 < hostOnly.length && hostOnly[close + 1] == ':') {
+        portFromHost = hostOnly.substring(close + 2);
+        hostOnly = hostOnly.substring(0, close + 1);
+      }
+    } else {
+      final lastColon = hostOnly.lastIndexOf(':');
+      if (lastColon != -1) {
+        final tail = hostOnly.substring(lastColon + 1);
+        if (RegExp(r'^\d{1,5}$').hasMatch(tail)) {
+          portFromHost = tail;
+          hostOnly = hostOnly.substring(0, lastColon);
+        }
+      }
+    }
+
+    final portTrim = portInput.trim();
+    final effectivePort =
+        portTrim.isNotEmpty ? portTrim : (portFromHost ?? '');
+
+    if (effectivePort.isEmpty) {
+      return '$scheme://$hostOnly';
+    }
+    return '$scheme://$hostOnly:$effectivePort';
+  }
+
   Future<void> initialize({
     required String host,
     required String port,
     required String username,
     required String password,
   }) async {
-    _host = host;
-    _port = port;
+    _host = host.trim();
+    _port = port.trim();
     _username = username;
     _password = password;
-    _serverUrl = 'http://$_host:$_port';
+    _serverUrl = normalizeServerBaseUrl(_host!, _port!);
 
     // Önbelleği temizle (yeni giriş yapıldığında)
     _formatCache.clear();
@@ -386,6 +431,48 @@ class IptvService {
         .replaceAll('{type}', streamType);
   }
 
+  Map<String, dynamic> _asStringKeyedMap(dynamic value) {
+    if (value is Map<String, dynamic>) return value;
+    if (value is Map) return Map<String, dynamic>.from(value);
+    return {};
+  }
+
+  Map<String, dynamic> _normalizeXtreamEpisode(
+    dynamic episodeRaw,
+    String season,
+    int orderInSeason,
+  ) {
+    final episode = _asStringKeyedMap(episodeRaw);
+    if (episode.isEmpty) {
+      return {
+        'id': '',
+        'title': '',
+        'container_extension': '',
+        'plot': '',
+        'duration': '',
+        'episode_num': orderInSeason,
+        'info': <String, dynamic>{},
+        'season': season,
+      };
+    }
+    final infoMap = _asStringKeyedMap(episode['info']);
+    dynamic epNum = episode['episode_num'] ?? infoMap['episode_num'];
+    if (epNum == null || epNum.toString().isEmpty) {
+      epNum = orderInSeason;
+    }
+    return {
+      'id': episode['id']?.toString() ?? '',
+      'title':
+          episode['title'] ?? infoMap['title'] ?? infoMap['name'] ?? '',
+      'container_extension': episode['container_extension']?.toString() ?? '',
+      'plot': infoMap['plot'] ?? episode['plot'] ?? '',
+      'duration': infoMap['duration'] ?? episode['duration'] ?? '',
+      'episode_num': epNum,
+      'info': infoMap,
+      'season': season,
+    };
+  }
+
   // URL'in gerçekten çalışıp çalışmadığını küçük bir GET (Range: 0-0) isteğiyle kontrol et
   Future<bool> _urlWorks(String url) async {
     try {
@@ -509,25 +596,32 @@ class IptvService {
       Log.d("DBG", response.data.toString());
 
       if (response.statusCode == 200) {
-        final data = response.data;
+        final root = _asStringKeyedMap(response.data);
 
-        // Tüm dizi bilgilerini koru
+        final info = _asStringKeyedMap(root['info']);
+        dynamic backdrop = info['backdrop_path'];
+        if (backdrop is! List) {
+          backdrop = [];
+        }
+
+        // info bazen Map değil veya hatalı series_id ile boş döner; List üzerinde
+        // ['plot'] ile indekslemek "String is not a subtype of int" hatasına yol açar.
         final seriesInfo = {
-          'name': data['info']['name'] ?? '',
-          'plot': data['info']['plot'] ?? '',
-          'cast': data['info']['cast'] ?? '',
-          'director': data['info']['director'] ?? '',
-          'genre': data['info']['genre'] ?? '',
-          'releaseDate': data['info']['releaseDate'] ?? '',
-          'rating': data['info']['rating'] ?? '',
-          'rating_5based': data['info']['rating_5based'] ?? 0,
-          'cover': data['info']['cover'] ?? '',
-          'banner': data['info']['banner'] ?? '',
-          'backdrop_path': data['info']['backdrop_path'] ?? [],
-          'youtube_trailer': data['info']['youtube_trailer'] ?? '',
-          'episode_run_time': data['info']['episode_run_time'] ?? '',
-          'seasons': data['seasons'] ?? [],
-          'episodes': data['episodes'] ?? {},
+          'name': info['name'] ?? '',
+          'plot': info['plot'] ?? '',
+          'cast': info['cast'] ?? '',
+          'director': info['director'] ?? '',
+          'genre': info['genre'] ?? '',
+          'releaseDate': info['releaseDate'] ?? '',
+          'rating': info['rating'] ?? '',
+          'rating_5based': info['rating_5based'] ?? 0,
+          'cover': info['cover'] ?? '',
+          'banner': info['banner'] ?? '',
+          'backdrop_path': backdrop,
+          'youtube_trailer': info['youtube_trailer'] ?? '',
+          'episode_run_time': info['episode_run_time'] ?? '',
+          'seasons': root['seasons'] ?? [],
+          'episodes': root['episodes'] ?? {},
         };
 
         Log.d("DBG", 'Debug - İşlenmiş dizi bilgileri:');
@@ -598,22 +692,16 @@ class IptvService {
           final result = <String, List<Map<String, dynamic>>>{};
 
           episodes.forEach((season, seasonEpisodes) {
-            if (seasonEpisodes is List) {
-              final episodeList = seasonEpisodes.map((episode) {
-                if (episode is Map<String, dynamic>) {
-                  return {
-                    'id': episode['id']?.toString() ?? '',
-                    'title': episode['title'] ?? '',
-                    'container_extension': episode['container_extension'] ?? '',
-                    'info': episode['info'] ?? {},
-                    'season': season,
-                  };
-                }
-                return <String, dynamic>{};
-              }).toList();
-
-              result[season] = episodeList;
+            if (seasonEpisodes is! List) {
+              return;
             }
+            final episodeList = <Map<String, dynamic>>[];
+            for (var i = 0; i < seasonEpisodes.length; i++) {
+              episodeList.add(
+                _normalizeXtreamEpisode(seasonEpisodes[i], season, i + 1),
+              );
+            }
+            result[season] = episodeList;
           });
 
           return result;

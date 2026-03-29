@@ -79,9 +79,12 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen> {
   }
 
   Future<void> _playContent(WatchHistory item) async {
-    // 1) Detay ekranları için her zaman historyId kullan
+    // Dizi kayıtlarında contentId = bölüm, historyId = dizi serisi API id'si.
+    final effectiveId = item.streamType == 'series'
+        ? item.historyId
+        : item.contentId;
     final contentItem = ContentItem(
-      id: item.contentId,
+      id: effectiveId,
       name: item.name,
       streamUrl: item.streamUrl,
       streamType: item.streamType,
@@ -99,10 +102,14 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen> {
         ),
       ).then((_) => _loadWatchHistory());
     } else {
-      final IptvService _iptv = IptvService();
-      String url = item.streamUrl ?? '';
+      final IptvService iptv = IptvService();
+      String url = '';
+      // Canlı yayında kayıtlı URL token/süre sorunlarına düşebilir; her seferinde taze URL üret.
+      if (item.streamType != 'live' && (item.streamUrl ?? '').isNotEmpty) {
+        url = item.streamUrl!;
+      }
       if (url.isEmpty) {
-        url = await _iptv.getStreamUrl(
+        url = await iptv.getStreamUrl(
                 streamId: item.contentId,
                 streamType: item.streamType ?? 'movie') ??
             '';

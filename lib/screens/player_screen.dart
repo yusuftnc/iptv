@@ -66,6 +66,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
   // İzleme geçmişi anahtarı
   late final String _historyId;
 
+  /// player_api çözümledikten sonra kullanılan gerçek URL (veritabanına yazılır)
+  String? _resolvedStreamUrl;
+
+  String get _streamUrlForStorage =>
+      (_resolvedStreamUrl != null && _resolvedStreamUrl!.isNotEmpty)
+          ? _resolvedStreamUrl!
+          : widget.streamUrl;
+
   void _cancelSeekAttempts() {
     // Gelecekteki denemeleri engelle
     _seekAttemptCount = _maxSeekAttempts;
@@ -143,7 +151,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       await _databaseService.addToWatchHistory(ContentItem(
         id: widget.contentId,
         name: widget.name,
-        streamUrl: widget.streamUrl,
+        streamUrl: _streamUrlForStorage,
         streamType: widget.contentType,
         streamIcon: widget.streamIcon,
         historyId: _historyId,
@@ -167,7 +175,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         final contentItem = ContentItem(
           id: widget.contentId,
           name: widget.name,
-          streamUrl: widget.streamUrl,
+          streamUrl: _streamUrlForStorage,
           streamType: widget.contentType,
           streamIcon: widget.streamIcon,
           position: _currentPosition.inSeconds,
@@ -195,6 +203,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _checkWatchPosition() async {
     try {
+      // Canlı yayında süre/pozisyon genelde anlamsızdır; seek diyalogu ve seekTo siyah ekran/kilit yapabilir.
+      if (widget.contentType == 'live') {
+        return;
+      }
       Log.d("DBG",
           "Debug - İzleme pozisyonu kontrol ediliyor: ${widget.contentId}");
       final watchHistory = await _databaseService.getWatchPosition(_historyId);
@@ -204,7 +216,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
           "Debug - İzleme geçmişi contentId: ${watchHistory?.contentId}");
       Log.d("DBG", "Debug - Current contentItem id: ${widget.contentId}");
 
+      final sameEpisode = watchHistory?.contentId == widget.contentId;
+      if (!sameEpisode && watchHistory != null) {
+        Log.d("DBG",
+            "Debug - Kayıt başka bir bölüme ait (${watchHistory.contentId} vs ${widget.contentId}), devam diyalogu atlanıyor");
+      }
+
       if (watchHistory != null &&
+          sameEpisode &&
           watchHistory.position != null &&
           watchHistory.position! > 10 &&
           watchHistory.duration != null &&
@@ -226,7 +245,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     _databaseService.addToWatchHistory(ContentItem(
                       id: widget.contentId,
                       name: widget.name,
-                      streamUrl: widget.streamUrl,
+                      streamUrl: _streamUrlForStorage,
                       streamType: widget.contentType,
                       streamIcon: widget.streamIcon,
                       position: 0,
@@ -294,9 +313,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
       } else {
         Log.d("DBG",
-            "Debug - Devam etmek için uygun pozisyon bulunamadı veya izleme geçmişi yok");
+            "Debug - Devam diyalogu gösterilmedi (koşullar sağlanmadı)");
         if (watchHistory == null) {
           Log.d("DBG", "Debug - İzleme geçmişi bulunamadı");
+        } else if (!sameEpisode) {
+          Log.d("DBG",
+              "Debug - Kayıt son izlenen bölüme (${watchHistory.contentId}) ait, şu anki bölüm ${widget.contentId}; bu bölüm baştan oynatılır");
         } else if (watchHistory.position == null) {
           Log.d("DBG", "Debug - İzleme pozisyonu null");
         } else if (watchHistory.position! <= 10) {
@@ -382,6 +404,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (streamUrl == null || streamUrl.isEmpty) {
         throw Exception('Stream URL bulunamadı');
       }
+      _resolvedStreamUrl = streamUrl;
 
       // İlk önce izleme pozisyonunu al
       Log.d("DBG",
@@ -394,7 +417,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
       bool shouldResume = false;
       int? resumePosition;
 
-      if (watchHistory != null &&
+      final recordMatchesThisVideo =
+          watchHistory?.contentId == widget.contentId;
+      if (widget.contentType != 'live' &&
+          watchHistory != null &&
+          recordMatchesThisVideo &&
           watchHistory.position != null &&
           watchHistory.position! > 10 &&
           watchHistory.duration != null &&
@@ -402,6 +429,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
         shouldResume = true;
         resumePosition = watchHistory.position;
         Log.d("DBG", "Debug - Video ${resumePosition} saniyeden devam edecek");
+      } else if (watchHistory != null &&
+          !recordMatchesThisVideo &&
+          widget.contentType == 'series') {
+        Log.d("DBG",
+            "Debug - Veritabanındaki kayıt başka bölüm; otomatik seek yapılmıyor");
       }
 
       // İzleme pozisyonu uygulama başlatılacağı pozisyonu (seekTo pozisyonunu) kaydet

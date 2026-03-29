@@ -21,6 +21,17 @@ class SeriesDetailScreen extends StatefulWidget {
 class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   final IptvService _iptvService = IptvService();
   final DatabaseService _databaseService = DatabaseService();
+
+  /// Kayıttaki `name` tek satırda "Dizi - S01E06 - Bölüm" olabilir. Yeni bölüm adını
+  /// `'$name - S…'` diye kurarsak üst üste binmiş olur; sadece dizi kısmını alırız.
+  String get _seriesTitleOnly {
+    var s = widget.seriesItem.name.trim();
+    final m = RegExp(r'\s-\sS\d+E').firstMatch(s);
+    if (m != null && m.start > 0) {
+      return s.substring(0, m.start).trim();
+    }
+    return s;
+  }
   bool _isLoading = true;
   String _errorMessage = '';
   bool _isFavorite = false;
@@ -36,9 +47,49 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _loadSeriesDetails();
     _checkIfFavorite();
-    _checkResumeHistory();
+    _bootstrapSeriesScreen();
+  }
+
+  /// Önce dizi için kayıtlı bölüm/pozisyon yüklenir; sonra API'den sezonlar gelir ve
+  /// doğru sezon otomatik seçilir — aksi halde "Devam Et" yanlış sezonda kalırdı.
+  Future<void> _bootstrapSeriesScreen() async {
+    await _checkResumeHistory();
+    await _loadSeriesDetails();
+  }
+
+  String _seriesHistoryLookupKey() =>
+      widget.seriesItem.historyId.isNotEmpty
+          ? widget.seriesItem.historyId
+          : widget.seriesItem.id;
+
+  bool _hasMeaningfulResume(WatchHistory h) {
+    if (h.streamType != 'series') return false;
+    if (h.position == null || h.duration == null) return false;
+    if (h.duration! <= 0) return false;
+    return h.position! > 10 && h.position! < (h.duration! - 30);
+  }
+
+  String? _seasonContainingEpisodeId(String episodeId) {
+    for (final entry in _episodesBySeason.entries) {
+      if (entry.value.any((ep) => ep['id'].toString() == episodeId)) {
+        return entry.key;
+      }
+    }
+    return null;
+  }
+
+  Future<void> _refreshResumeFromDb() async {
+    await _checkResumeHistory();
+    final season = _resumeHistory != null
+        ? _seasonContainingEpisodeId(_resumeHistory!.contentId)
+        : null;
+    if (!mounted) return;
+    if (season != null && season.isNotEmpty) {
+      setState(() => _selectedSeason = season);
+    } else {
+      setState(() {});
+    }
   }
 
   Future<void> _checkIfFavorite() async {
@@ -78,13 +129,30 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
 
       // Sezonları sırala
       final seasons = episodesBySeason.keys.toList();
-      seasons.sort((a, b) => int.parse(a).compareTo(int.parse(b)));
+      seasons.sort((a, b) {
+        final ai = int.tryParse(a);
+        final bi = int.tryParse(b);
+        if (ai != null && bi != null) return ai.compareTo(bi);
+        return a.compareTo(b);
+      });
+
+      var initialSeason = seasons.isNotEmpty ? seasons.first : '';
+      if (_resumeHistory != null && _hasMeaningfulResume(_resumeHistory!)) {
+        final epId = _resumeHistory!.contentId;
+        for (final s in seasons) {
+          final eps = episodesBySeason[s] ?? [];
+          if (eps.any((ep) => ep['id'].toString() == epId)) {
+            initialSeason = s;
+            break;
+          }
+        }
+      }
 
       setState(() {
         _seriesInfo = seriesInfo;
         _episodesBySeason = episodesBySeason;
         _seasons = seasons;
-        _selectedSeason = seasons.isNotEmpty ? seasons.first : '';
+        _selectedSeason = initialSeason;
         _isLoading = false;
       });
     } catch (e) {
@@ -98,7 +166,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
 
   Future<void> _checkResumeHistory() async {
     final history =
-        await _databaseService.getWatchPosition(widget.seriesItem.id);
+        await _databaseService.getWatchPosition(_seriesHistoryLookupKey());
     if (mounted) {
       setState(() {
         _resumeHistory = history;
@@ -108,10 +176,14 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
 
   void _playEpisode(Map<String, dynamic> episode) {
     // Bölüm için ContentItem oluştur
+    final epNum = episode['episode_num'];
+    final epLabel = (epNum == null || epNum.toString() == 'null')
+        ? '?'
+        : epNum.toString();
     final episodeItem = ContentItem(
       id: episode['id'].toString(),
       name:
-          '${widget.seriesItem.name} - S${_selectedSeason}E${episode['episode_num']} - ${episode['title']}',
+          '$_seriesTitleOnly - S${_selectedSeason}E$epLabel - ${episode['title']}',
       streamType: 'series',
       streamIcon: widget.seriesItem.streamIcon,
       description: episode['plot'] ?? '',
@@ -141,7 +213,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
         },
         transitionDuration: const Duration(milliseconds: 100),
       ),
-    );
+    ).then((_) => _refreshResumeFromDb());
   }
 
   void _resumeLastEpisode() {
@@ -149,7 +221,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
 
     final contentItem = ContentItem(
       id: _resumeHistory!.contentId, // episode id o an oynanan bölüm
-      name: _resumeHistory!.name ?? widget.seriesItem.name,
+      name: _resumeHistory!.name,
       streamType: 'series',
       streamIcon: _resumeHistory!.streamIcon ?? widget.seriesItem.streamIcon,
       streamUrl: _resumeHistory!.streamUrl,
@@ -174,7 +246,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
         },
         transitionDuration: const Duration(milliseconds: 100),
       ),
-    );
+    ).then((_) => _refreshResumeFromDb());
   }
 
   @override
@@ -182,7 +254,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: Text(widget.seriesItem.name),
+        title: Text(_seriesTitleOnly),
         backgroundColor: Colors.blue,
         actions: [
           IconButton(
@@ -264,12 +336,13 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   }
 
   Widget _buildSeriesInfo() {
-    final plot = _seriesInfo['plot'] ?? widget.seriesItem.description ?? '';
-    final cast = _seriesInfo['cast'] ?? '';
-    final director = _seriesInfo['director'] ?? '';
-    final genre = _seriesInfo['genre'] ?? '';
-    final releaseDate = _seriesInfo['releaseDate'] ?? '';
-    final rating = _seriesInfo['rating'] ?? '';
+    final plot =
+        '${_seriesInfo['plot'] ?? widget.seriesItem.description ?? ''}';
+    final cast = '${_seriesInfo['cast'] ?? ''}';
+    final director = '${_seriesInfo['director'] ?? ''}';
+    final genre = '${_seriesInfo['genre'] ?? ''}';
+    final releaseDate = '${_seriesInfo['releaseDate'] ?? ''}';
+    final rating = '${_seriesInfo['rating'] ?? ''}';
 
     // Rating'i 10 üzerinden alıp 5 üzerine çevir
     double ratingValue = 0;
@@ -436,7 +509,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
       padding: const EdgeInsets.symmetric(horizontal: 16),
       child: Row(
         children: [
-          if (_resumeHistory != null) ...[
+          if (_resumeHistory != null && _hasMeaningfulResume(_resumeHistory!)) ...[
             ElevatedButton(
               onPressed: _resumeLastEpisode,
               style: ElevatedButton.styleFrom(

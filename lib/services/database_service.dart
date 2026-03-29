@@ -1,11 +1,17 @@
-import 'package:flutter/foundation.dart';
 import 'package:hive/hive.dart';
 import 'package:iptv_app/utils/logger.dart';
 import '../models/favorite_item.dart';
 import '../models/watch_history.dart';
 import '../models/user_settings.dart';
 import '../models/content_item.dart';
-import 'dart:convert'; // Added for jsonEncode
+
+/// Birden fazla " - S01E" biriktiyse dizi kökü + son bölüm tek satırda (eski bug + yeni kayıt).
+String _oneLineSeriesHistoryName(String name) {
+  final re = RegExp(r'\s-\sS\d+E');
+  final ms = re.allMatches(name).toList();
+  if (ms.length <= 1) return name;
+  return '${name.substring(0, ms.first.start).trim()} ${name.substring(ms.last.start).trim()}';
+}
 
 class DatabaseService {
   static const String _favoritesBox = 'favorites';
@@ -20,6 +26,28 @@ class DatabaseService {
   }
 
   DatabaseService._internal();
+
+  Future<void> _repairSeriesWatchNames(Box<WatchHistory> box) async {
+    for (final key in box.keys.toList()) {
+      final item = box.get(key);
+      if (item == null || item.streamType != 'series') continue;
+      final fixed = _oneLineSeriesHistoryName(item.name);
+      if (fixed == item.name) continue;
+      final w = WatchHistory(
+        contentId: item.contentId,
+        name: fixed,
+        streamType: item.streamType,
+        streamIcon: item.streamIcon,
+        position: item.position,
+        duration: item.duration,
+        streamUrl: item.streamUrl,
+        category: item.category,
+        historyId: item.historyId,
+      );
+      w.watchDate = item.watchDate;
+      await box.put(key, w);
+    }
+  }
 
   // Favoriler
   Future<List<FavoriteItem>> getFavorites() async {
@@ -56,15 +84,9 @@ class DatabaseService {
   // İzleme Geçmişi
   Future<List<WatchHistory>> getWatchHistory() async {
     final box = await Hive.openBox<WatchHistory>(_watchHistoryBox);
+    await _repairSeriesWatchNames(box);
     final List<WatchHistory> history = box.values.toList();
-    // En son izlenenler en üstte olacak şekilde sırala
     history.sort((a, b) => b.watchDate.compareTo(a.watchDate));
-
-    for (var item in history) {
-      print(
-          'WatchHistory: {contentId: ${item.contentId}, name: ${item.name}, streamType: ${item.streamType}, streamIcon: ${item.streamIcon}, watchDate: ${item.watchDate}, position: ${item.position}, duration: ${item.duration}, streamUrl: ${item.streamUrl}, category: ${item.category}, historyId: ${item.historyId}}');
-    }
-
     return history;
   }
 
@@ -74,10 +96,15 @@ class DatabaseService {
           "Debug - Database addToWatchHistory - ContentID: ${contentItem.id}, Pozisyon: ${contentItem.position}, Süre: ${contentItem.duration}");
       final box = await Hive.openBox<WatchHistory>(_watchHistoryBox);
 
+      final type = contentItem.streamType ?? 'live';
+      final storedName = type == 'series'
+          ? _oneLineSeriesHistoryName(contentItem.name)
+          : contentItem.name;
+
       final watchItem = WatchHistory(
         contentId: contentItem.id,
-        name: contentItem.name,
-        streamType: contentItem.streamType ?? 'live',
+        name: storedName,
+        streamType: type,
         streamIcon: contentItem.streamIcon,
         position: contentItem.position,
         duration: contentItem.duration,
@@ -90,8 +117,8 @@ class DatabaseService {
       final key = contentItem.historyId;
       await box.put(key, watchItem);
 
-      // Kaydettikten sonra kontrol et
-      final savedItem = box.get(contentItem.id);
+      // Kaydettikten sonra kontrol et (Hive anahtarı historyId)
+      final savedItem = box.get(key);
       Log.d("DBG",
           "Debug - Database kaydedilen: ContentID: ${savedItem?.contentId}, Pozisyon: ${savedItem?.position}, Süre: ${savedItem?.duration}");
     } catch (e) {
@@ -112,6 +139,7 @@ class DatabaseService {
   Future<List<WatchHistory>> getLastWatched(String contentType,
       {int limit = 10}) async {
     final box = await Hive.openBox<WatchHistory>(_watchHistoryBox);
+    await _repairSeriesWatchNames(box);
     final filtered =
         box.values.where((e) => e.streamType == contentType).toList();
     filtered.sort((a, b) => b.watchDate.compareTo(a.watchDate));
