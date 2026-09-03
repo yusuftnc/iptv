@@ -53,6 +53,39 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   }
 
   Future<void> _playContent(FavoriteItem item) async {
+    final seriesIdForEpisode = item.seriesId;
+
+    if (item.streamType == 'series' && item.isSeriesEpisodeFavorite) {
+      final historyId = (seriesIdForEpisode != null &&
+              seriesIdForEpisode.isNotEmpty)
+          ? seriesIdForEpisode
+          : item.id;
+      String url = item.streamUrl ?? '';
+      if (url.isEmpty) {
+        url = await IptvService().getStreamUrl(
+              streamId: item.id,
+              streamType: 'series',
+            ) ??
+            '';
+      }
+
+      if (!mounted) return;
+      Navigator.push(
+        context,
+        MaterialPageRoute(
+          builder: (context) => PlayerScreen(
+            contentId: item.id,
+            streamUrl: url,
+            contentType: 'series',
+            name: item.name,
+            streamIcon: item.streamIcon,
+            historyId: historyId,
+          ),
+        ),
+      );
+      return;
+    }
+
     final contentItem = ContentItem(
       id: item.id,
       name: item.name,
@@ -72,14 +105,15 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
         ),
       );
     } else {
-      final IptvService _iptv = IptvService();
+      final IptvService iptv = IptvService();
       String url = item.streamUrl ?? '';
       if (url.isEmpty) {
-        url = await _iptv.getStreamUrl(
+        url = await iptv.getStreamUrl(
                 streamId: item.id, streamType: item.streamType ?? 'movie') ??
             '';
       }
 
+      if (!mounted) return;
       Navigator.push(
         context,
         MaterialPageRoute(

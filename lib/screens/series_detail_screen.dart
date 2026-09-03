@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/content_item.dart';
+import '../models/playlist_episode.dart';
 import '../models/watch_history.dart';
 import '../services/iptv_service.dart';
 import '../services/database_service.dart';
@@ -174,39 +175,53 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     }
   }
 
-  void _playEpisode(Map<String, dynamic> episode) {
-    // Bölüm için ContentItem oluştur
-    final epNum = episode['episode_num'];
-    final epLabel = (epNum == null || epNum.toString() == 'null')
-        ? '?'
-        : epNum.toString();
-    final episodeItem = ContentItem(
-      id: episode['id'].toString(),
-      name:
-          '$_seriesTitleOnly - S${_selectedSeason}E$epLabel - ${episode['title']}',
-      streamType: 'series',
-      streamIcon: widget.seriesItem.streamIcon,
-      description: episode['plot'] ?? '',
-      category: widget.seriesItem.category,
-      // Eğer container_extension varsa, doğrudan stream URL'ini oluştur
-      streamUrl: episode['container_extension'] != null &&
-              episode['container_extension'].toString().isNotEmpty
-          ? '${_iptvService.getServerUrl()}/series/${_iptvService.getUsername()}/${_iptvService.getPassword()}/${episode['id']}.${episode['container_extension']}'
-          : null,
-      historyId: widget.seriesItem.id,
-    );
+  List<PlaylistEpisode> _buildPlaylist() {
+    final flat = <PlaylistEpisode>[];
+    for (final season in _seasons) {
+      final eps = _episodesBySeason[season] ?? [];
+      for (final episode in eps) {
+        final epNum = episode['episode_num'];
+        final epLabel = (epNum == null || epNum.toString() == 'null')
+            ? '?'
+            : epNum.toString();
+        final streamUrl = episode['container_extension'] != null &&
+                episode['container_extension'].toString().isNotEmpty
+            ? '${_iptvService.getServerUrl()}/series/${_iptvService.getUsername()}/${_iptvService.getPassword()}/${episode['id']}.${episode['container_extension']}'
+            : null;
+        flat.add(PlaylistEpisode(
+          id: episode['id'].toString(),
+          name:
+              '$_seriesTitleOnly - S${season}E$epLabel - ${episode['title'] ?? ''}',
+          streamUrl: streamUrl,
+          season: season,
+          episodeLabel: epLabel,
+        ));
+      }
+    }
+    return flat;
+  }
 
-    // Oynatma ekranına git
+  void _openPlayer({
+    required String contentId,
+    required String name,
+    String? streamUrl,
+    String? streamIcon,
+  }) {
+    final playlist = _buildPlaylist();
+    final index = playlist.indexWhere((e) => e.id == contentId);
+
     Navigator.push(
       context,
       PageRouteBuilder(
         pageBuilder: (context, animation, secondaryAnimation) => PlayerScreen(
-          contentId: episodeItem.id,
-          historyId: episodeItem.historyId,
-          streamUrl: episodeItem.streamUrl ?? '',
+          contentId: contentId,
+          historyId: widget.seriesItem.id,
+          streamUrl: streamUrl ?? '',
           contentType: 'series',
-          name: episodeItem.name,
-          streamIcon: episodeItem.streamIcon,
+          name: name,
+          streamIcon: streamIcon ?? widget.seriesItem.streamIcon,
+          playlist: playlist,
+          playlistIndex: index >= 0 ? index : null,
         ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(opacity: animation, child: child);
@@ -216,37 +231,33 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     ).then((_) => _refreshResumeFromDb());
   }
 
+  void _playEpisode(Map<String, dynamic> episode) {
+    final epNum = episode['episode_num'];
+    final epLabel = (epNum == null || epNum.toString() == 'null')
+        ? '?'
+        : epNum.toString();
+    final streamUrl = episode['container_extension'] != null &&
+            episode['container_extension'].toString().isNotEmpty
+        ? '${_iptvService.getServerUrl()}/series/${_iptvService.getUsername()}/${_iptvService.getPassword()}/${episode['id']}.${episode['container_extension']}'
+        : null;
+
+    _openPlayer(
+      contentId: episode['id'].toString(),
+      name:
+          '$_seriesTitleOnly - S${_selectedSeason}E$epLabel - ${episode['title']}',
+      streamUrl: streamUrl,
+    );
+  }
+
   void _resumeLastEpisode() {
     if (_resumeHistory == null) return;
 
-    final contentItem = ContentItem(
-      id: _resumeHistory!.contentId, // episode id o an oynanan bölüm
+    _openPlayer(
+      contentId: _resumeHistory!.contentId,
       name: _resumeHistory!.name,
-      streamType: 'series',
-      streamIcon: _resumeHistory!.streamIcon ?? widget.seriesItem.streamIcon,
       streamUrl: _resumeHistory!.streamUrl,
-      position: _resumeHistory!.position,
-      duration: _resumeHistory!.duration,
-      historyId: widget.seriesItem.id,
+      streamIcon: _resumeHistory!.streamIcon,
     );
-
-    Navigator.push(
-      context,
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => PlayerScreen(
-          contentId: contentItem.id,
-          historyId: contentItem.historyId,
-          streamUrl: contentItem.streamUrl ?? '',
-          contentType: 'series',
-          name: contentItem.name,
-          streamIcon: contentItem.streamIcon,
-        ),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(opacity: animation, child: child);
-        },
-        transitionDuration: const Duration(milliseconds: 100),
-      ),
-    ).then((_) => _refreshResumeFromDb());
   }
 
   @override
@@ -504,56 +515,55 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   }
 
   Widget _buildSeasonSelector() {
+    final showResume =
+        _resumeHistory != null && _hasMeaningfulResume(_resumeHistory!);
+
     return Container(
       height: 50,
       padding: const EdgeInsets.symmetric(horizontal: 16),
-      child: Row(
-        children: [
-          if (_resumeHistory != null && _hasMeaningfulResume(_resumeHistory!)) ...[
-            ElevatedButton(
-              onPressed: _resumeLastEpisode,
+      child: ListView.builder(
+        scrollDirection: Axis.horizontal,
+        itemCount: _seasons.length + (showResume ? 1 : 0),
+        itemBuilder: (context, index) {
+          if (showResume && index == 0) {
+            return Padding(
+              padding: const EdgeInsets.only(right: 8),
+              child: ElevatedButton(
+                onPressed: _resumeLastEpisode,
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: Colors.green,
+                  foregroundColor: Colors.white,
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                ),
+                child: const Text('Devam Et'),
+              ),
+            );
+          }
+
+          final season = _seasons[index - (showResume ? 1 : 0)];
+          final isSelected = season == _selectedSeason;
+
+          return Padding(
+            padding: const EdgeInsets.only(right: 8),
+            child: ElevatedButton(
+              onPressed: () {
+                setState(() {
+                  _selectedSeason = season;
+                });
+              },
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.green,
+                backgroundColor: isSelected ? Colors.blue : Colors.grey[800],
                 foregroundColor: Colors.white,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
               ),
-              child: const Text('Devam Et'),
+              child: Text('Sezon $season'),
             ),
-            const SizedBox(width: 8),
-          ],
-          Expanded(
-            child: ListView.builder(
-              scrollDirection: Axis.horizontal,
-              itemCount: _seasons.length,
-              itemBuilder: (context, index) {
-                final season = _seasons[index];
-                final isSelected = season == _selectedSeason;
-
-                return Padding(
-                  padding: const EdgeInsets.only(right: 8),
-                  child: ElevatedButton(
-                    onPressed: () {
-                      setState(() {
-                        _selectedSeason = season;
-                      });
-                    },
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor:
-                          isSelected ? Colors.blue : Colors.grey[800],
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(8),
-                      ),
-                    ),
-                    child: Text('Sezon $season'),
-                  ),
-                );
-              },
-            ),
-          ),
-        ],
+          );
+        },
       ),
     );
   }

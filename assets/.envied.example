@@ -1,0 +1,4 @@
+# Bu dosyayı `assets/.envied` olarak kopyalayın (repoya eklemeyin).
+# Üretimde güçlü, benzersiz bir değer kullanın; sonra:
+#   dart run build_runner build --delete-conflicting-outputs
+CREDENTIALS_SECRET=iptv_dev_only_replace_with_long_random_secret_in_production

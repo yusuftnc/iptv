@@ -24,13 +24,14 @@ class FavoriteItemAdapter extends TypeAdapter<FavoriteItem> {
       category: fields[4] as String?,
       streamUrl: fields[6] as String?,
       description: fields[7] as String?,
+      seriesId: fields[8] as String?,
     )..addedDate = fields[5] as DateTime;
   }
 
   @override
   void write(BinaryWriter writer, FavoriteItem obj) {
     writer
-      ..writeByte(8)
+      ..writeByte(9)
       ..writeByte(0)
       ..write(obj.id)
       ..writeByte(1)
@@ -46,7 +47,9 @@ class FavoriteItemAdapter extends TypeAdapter<FavoriteItem> {
       ..writeByte(6)
       ..write(obj.streamUrl)
       ..writeByte(7)
-      ..write(obj.description);
+      ..write(obj.description)
+      ..writeByte(8)
+      ..write(obj.seriesId);
   }
 
   @override

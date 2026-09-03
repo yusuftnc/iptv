@@ -58,6 +58,10 @@ class DatabaseService {
   Future<void> addFavorite(ContentItem contentItem) async {
     final box = await Hive.openBox<FavoriteItem>(_favoritesBox);
 
+    final isEpisode = contentItem.streamType == 'series' &&
+        contentItem.historyId.isNotEmpty &&
+        contentItem.historyId != contentItem.id;
+
     final favorite = FavoriteItem(
       id: contentItem.id,
       name: contentItem.name,
@@ -66,6 +70,7 @@ class DatabaseService {
       category: contentItem.category,
       streamUrl: contentItem.streamUrl,
       description: contentItem.description,
+      seriesId: isEpisode ? contentItem.historyId : null,
     );
 
     await box.put(contentItem.id, favorite);

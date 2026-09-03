@@ -28,6 +28,10 @@ class FavoriteItem extends HiveObject {
   @HiveField(7)
   String? description;
 
+  /// Bölüm favorisinde dizi serisi API id'si; dizi favorisinde null.
+  @HiveField(8)
+  String? seriesId;
+
   FavoriteItem({
     required this.id,
     required this.name,
@@ -36,5 +40,16 @@ class FavoriteItem extends HiveObject {
     this.category,
     this.streamUrl,
     this.description,
+    this.seriesId,
   });
+
+  bool get isSeriesEpisodeFavorite {
+    if (streamType != 'series') return false;
+    if (seriesId != null &&
+        seriesId!.isNotEmpty &&
+        seriesId != id) {
+      return true;
+    }
+    return RegExp(r'S\d+E\d+', caseSensitive: false).hasMatch(name);
+  }
 }
