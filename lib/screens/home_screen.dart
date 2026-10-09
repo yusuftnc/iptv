@@ -4,8 +4,9 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:iptv_app/utils/logger.dart';
 import '../models/content_item.dart';
 import '../services/iptv_service.dart';
+import '../services/cloud_sync_service.dart';
 import '../services/storage_service.dart';
-import 'login_screen.dart';
+import 'discover_screen.dart';
 import 'player_screen.dart';
 import 'series_detail_screen.dart';
 import 'search_screen.dart';
@@ -150,13 +151,14 @@ class _HomeScreenState extends State<HomeScreen> {
   }
 
   Future<void> _logout() async {
+    await CloudSyncService.instance.stop();
     final storageService = StorageService();
     await storageService.clearCredentials();
 
     if (mounted) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const LoginScreen()),
+        MaterialPageRoute(builder: (context) => const DiscoverScreen()),
       );
     }
   }

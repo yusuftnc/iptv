@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../services/cloud_sync_service.dart';
 import '../services/iptv_service.dart';
 import '../services/storage_service.dart';
 import 'home_screen.dart';
@@ -77,6 +78,13 @@ class _LoginScreenState extends State<LoginScreen> {
             );
           }
 
+          await CloudSyncService.instance.start(
+            host: _hostController.text,
+            port: _portController.text,
+            username: _usernameController.text,
+            password: _passwordController.text,
+          );
+
           if (mounted) {
             Navigator.pushReplacement(
               context,
@@ -122,7 +130,7 @@ class _LoginScreenState extends State<LoginScreen> {
     return Scaffold(
       backgroundColor: Colors.black,
       appBar: AppBar(
-        title: const Text('IPTV Giriş'),
+        title: const Text('Bağlantı'),
         backgroundColor: Colors.blue,
       ),
       body: Center(

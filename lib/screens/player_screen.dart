@@ -7,8 +7,16 @@ import '../models/playlist_episode.dart';
 import '../services/iptv_service.dart';
 import '../services/database_service.dart';
 import '../services/storage_service.dart';
+import '../services/cloud_sync_service.dart';
+import '../services/cast_service.dart';
+import '../models/cast_pick_result.dart';
+import 'package:flutter_chrome_cast/entities.dart';
+import 'package:flutter_chrome_cast/enums.dart';
+import '../widgets/cast_device_picker.dart';
 import 'dart:async';
+import 'dart:io' show Platform;
 import 'dart:math' show max;
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 class PlayerScreen extends StatefulWidget {
   final String contentId;
@@ -112,6 +120,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _playlistIndex != null &&
       _playlistIndex! < _playlist!.length - 1;
 
+  bool get _isRemotePlaying =>
+      _isCasting && !_isAirPlaying
+          ? _isCastPlaying
+          : (_controller != null && _controller!.value.isPlaying);
+
   void _cancelSeekAttempts() {
     // Gelecekteki denemeleri engelle
     _seekAttemptCount = _maxSeekAttempts;
@@ -123,6 +136,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   /// Sonraki/önceki bölüme geçerken dispose portreye zorlamasın.
   bool _navigatingToEpisode = false;
+  bool _isCasting = false;
+  /// AirPlay: VLC yerine AVPlayer + sistem AirPlay picker kullanılır.
+  bool _isAirPlaying = false;
+  StreamSubscription<GoogleCastSession?>? _castSessionSub;
+  StreamSubscription<GoggleCastMediaStatus?>? _castMediaSub;
+  StreamSubscription<Duration>? _castPositionSub;
+  bool _resumingLocal = false;
+  bool _stoppingCast = false;
+  bool _isCastPlaying = false;
 
   @override
   void initState() {
@@ -152,6 +174,116 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _checkIfFavorite();
       _startHideControlsTimer();
     });
+
+    _castSessionSub = CastService.instance.sessionStream.listen((session) {
+      if (!mounted || _stoppingCast || _resumingLocal) return;
+      final connected =
+          session?.connectionState == GoogleCastConnectState.connected;
+      if (_isCasting && !_isAirPlaying && !connected) {
+        setState(() => _isCasting = false);
+        _resumeLocalAfterCast();
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('TV bağlantısı kesildi')),
+        );
+      }
+    });
+
+    _castMediaSub = CastService.instance.mediaStatusStream.listen((status) {
+      if (!mounted || !_isCasting || _isAirPlaying) return;
+      final playing = status?.playerState == CastMediaPlayerState.playing ||
+          status?.playerState == CastMediaPlayerState.buffering;
+      final duration = status?.mediaInformation?.duration;
+      setState(() {
+        _isCastPlaying = playing;
+        if (duration != null && duration > Duration.zero) {
+          _totalDuration = duration;
+        }
+      });
+    });
+
+    _castPositionSub = CastService.instance.playerPositionStream.listen((pos) {
+      if (!mounted || !_isCasting || _isAirPlaying || _isDraggingProgress) {
+        return;
+      }
+      setState(() => _currentPosition = pos);
+      if ((pos.inSeconds % 5 == 0 ||
+              (pos.inSeconds - (_lastSavedPosition?.inSeconds ?? 0)).abs() >=
+                  5) &&
+          pos.inSeconds > 0) {
+        _updateWatchPosition();
+        _lastSavedPosition = pos;
+      }
+    });
+  }
+
+  Future<void> _resumeLocalAfterCast() async {
+    if (_resumingLocal) return;
+    _resumingLocal = true;
+    try {
+      if (!mounted) return;
+      if (_isCasting || _isAirPlaying) {
+        setState(() {
+          _isCasting = false;
+          _isAirPlaying = false;
+          _showControls = true;
+        });
+      } else if (mounted) {
+        setState(() => _showControls = true);
+      }
+
+      await WidgetsBinding.instance.endOfFrame;
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      if (!mounted) return;
+
+      final controller = _controller;
+      final url = _streamUrlForStorage;
+      final resumeAt = _currentPosition;
+
+      if (controller == null || !controller.value.isInitialized) {
+        await _initializePlayer();
+        return;
+      }
+
+      final state = controller.value.playingState;
+      final needsReload = state == PlayingState.stopped ||
+          state == PlayingState.ended ||
+          state == PlayingState.error ||
+          url.isEmpty;
+
+      try {
+        if (needsReload && url.isNotEmpty) {
+          await controller.setMediaFromNetwork(url, autoPlay: true);
+        } else {
+          await controller.play();
+        }
+      } catch (e) {
+        Log.d('Cast', 'local play failed, reloading: $e');
+        if (url.isNotEmpty) {
+          try {
+            await controller.setMediaFromNetwork(url, autoPlay: true);
+          } catch (e2) {
+            Log.d('Cast', 'setMedia failed: $e2');
+            await _initializePlayer();
+            return;
+          }
+        } else {
+          await _initializePlayer();
+          return;
+        }
+      }
+
+      if (widget.contentType != 'live' && resumeAt.inSeconds > 5) {
+        await Future<void>.delayed(const Duration(milliseconds: 400));
+        try {
+          await _controller?.seekTo(resumeAt);
+          await _controller?.play();
+        } catch (_) {}
+      }
+
+      if (mounted) setState(() {});
+    } finally {
+      _resumingLocal = false;
+    }
   }
 
   void _applyPlayerOrientations() {
@@ -706,7 +838,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     });
   }
 
-  void _seekForward() {
+  Future<void> _seekForward() async {
+    if (_isCasting && !_isAirPlaying) {
+      await CastService.instance.seekBy(const Duration(seconds: 10));
+      _startHideControlsTimer();
+      return;
+    }
     if (_controller != null) {
       final currentPos = _controller!.value.position.inSeconds;
       _controller!.seekTo(Duration(seconds: currentPos + 10));
@@ -719,7 +856,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
-  void _seekBackward() {
+  Future<void> _seekBackward() async {
+    if (_isCasting && !_isAirPlaying) {
+      await CastService.instance.seekBy(const Duration(seconds: -10));
+      _startHideControlsTimer();
+      return;
+    }
     if (_controller != null) {
       final currentPos = _controller!.value.position.inSeconds;
       _controller!.seekTo(Duration(seconds: max(0, currentPos - 10)));
@@ -935,6 +1077,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _positionUpdateTimer?.cancel();
     _positionUpdateTimer =
         Timer.periodic(const Duration(milliseconds: 500), (timer) {
+      if (_isCasting && !_isAirPlaying) return;
       if (_controller != null && mounted) {
         final position = _controller!.value.position;
         final duration = _controller!.value.duration;
@@ -1036,7 +1179,170 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
+  Future<void> _waitForPopupToClose() async {
+    await WidgetsBinding.instance.endOfFrame;
+    for (var i = 0; i < 24; i++) {
+      if (!mounted) return;
+      final route = ModalRoute.of(context);
+      if (route == null || route.isCurrent) break;
+      await Future<void>.delayed(const Duration(milliseconds: 50));
+    }
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+  }
+
+  Future<void> _castToDevice() async {
+    final url = _streamUrlForStorage;
+    if (url.isEmpty) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Yansıtılacak yayın henüz hazır değil')),
+      );
+      return;
+    }
+
+    await _waitForPopupToClose();
+    if (!mounted) return;
+
+    final pick = await showCastDevicePicker(context);
+    if (pick == null || !mounted) return;
+
+    if (pick is! CastPickGoogleCast) return;
+    final device = pick.device;
+
+    try {
+      if (mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text(
+              '${device.friendlyName} bağlanıyor… '
+              'Bekleme ekranındaysa uyandırılıyor.',
+            ),
+          ),
+        );
+      }
+
+      await CastService.instance.connectAndPlay(
+        device: device,
+        streamUrl: url,
+        title: widget.name,
+        contentType: widget.contentType,
+        imageUrl: widget.streamIcon,
+        position: _currentPosition,
+      );
+
+      try {
+        await _controller?.pause();
+      } catch (_) {}
+
+      if (mounted) {
+        setState(() {
+          _isAirPlaying = false;
+          _isCasting = true;
+          _isCastPlaying = true;
+          _showControls = true;
+        });
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('${device.friendlyName} üzerinde oynatılıyor'),
+            backgroundColor: Colors.green,
+          ),
+        );
+      }
+    } catch (e) {
+      Log.d('Cast', 'cast error: $e');
+      await _resumeLocalAfterCast();
+      if (mounted) {
+        setState(() => _isCasting = false);
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(
+            content: Text('Yansıtma başarısız: $e'),
+            backgroundColor: Colors.red,
+          ),
+        );
+      }
+    }
+  }
+
+  Future<void> _resumeLocalAudioAfterCast() async {
+    await CastService.instance.restoreLocalAudio();
+    final controller = _controller;
+    if (controller == null) return;
+    final volume = _isMuted ? 0 : _currentVolume.round().clamp(0, 100);
+    try {
+      await controller.pause();
+      await controller.setVolume(volume);
+      await controller.play();
+    } catch (e) {
+      Log.d('Cast', 'local audio resume: $e');
+      try {
+        await controller.play();
+      } catch (_) {}
+    }
+  }
+
+  Future<void> _stopCasting() async {
+    await _teardownRemotePlayback(showSnack: true);
+  }
+
+  Future<void> _teardownRemotePlayback({bool showSnack = false}) async {
+    _stoppingCast = true;
+    final wasGoogleCast = _isCasting && !_isAirPlaying;
+    final wasAirPlay = _isAirPlaying;
+    if (wasGoogleCast) {
+      try {
+        await CastService.instance.disconnect();
+      } catch (_) {}
+    }
+    if (!mounted) {
+      _stoppingCast = false;
+      return;
+    }
+    setState(() {
+      _isAirPlaying = false;
+      _isCasting = false;
+      _isCastPlaying = false;
+      _showControls = true;
+    });
+    await WidgetsBinding.instance.endOfFrame;
+    if (wasAirPlay) {
+      await Future<void>.delayed(const Duration(milliseconds: 250));
+      if (mounted) {
+        await _initializePlayer();
+      }
+    } else if (wasGoogleCast) {
+      await _resumeLocalAudioAfterCast();
+    } else {
+      try {
+        await _controller?.play();
+      } catch (e) {
+        Log.d('Cast', 'local play after stop: $e');
+      }
+    }
+    _stoppingCast = false;
+    if (showSnack && mounted) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Yansıtma durduruldu')),
+      );
+    }
+  }
+
   Future<void> _togglePlayPause() async {
+    if (_isCasting && !_isAirPlaying) {
+      try {
+        if (_isCastPlaying) {
+          await CastService.instance.pause();
+          if (mounted) setState(() => _isCastPlaying = false);
+        } else {
+          await CastService.instance.play();
+          if (mounted) setState(() => _isCastPlaying = true);
+        }
+      } catch (e) {
+        Log.d('Cast', 'remote play/pause: $e');
+      }
+      _startHideControlsTimer();
+      return;
+    }
+
     if (_controller == null) return;
 
     if (_controller!.value.isEnded ||
@@ -1054,6 +1360,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _handledEpisodeEnd = false;
         } catch (e2) {
           Log.d('DBG', 'Replay alternatif hatası: $e2');
+          await _resumeLocalAfterCast();
         }
       }
       if (mounted) setState(() {});
@@ -1061,14 +1368,30 @@ class _PlayerScreenState extends State<PlayerScreen> {
       return;
     }
 
-    setState(() {
-      if (_controller!.value.isPlaying) {
-        _controller!.pause();
-        _cancelSeekAttempts();
-      } else {
-        _controller!.play();
-      }
-    });
+    if (_controller!.value.isPlaying) {
+      await _controller!.pause();
+      _cancelSeekAttempts();
+      if (mounted) setState(() {});
+      _startHideControlsTimer();
+      return;
+    }
+
+    try {
+      await _controller!.play();
+    } catch (e) {
+      Log.d('DBG', 'Play hatası: $e');
+    }
+
+    await Future<void>.delayed(const Duration(milliseconds: 200));
+    var playing = false;
+    try {
+      playing = await _controller?.isPlaying() ?? false;
+    } catch (_) {}
+    if (!playing) {
+      await _resumeLocalAfterCast();
+    }
+
+    if (mounted) setState(() {});
     _startHideControlsTimer();
   }
 
@@ -1299,9 +1622,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
         !_handledEpisodeEnd) {
       _updateWatchPosition();
     }
+    unawaited(CloudSyncService.instance.flush());
     _positionUpdateTimer?.cancel();
     _hideControlsTimer?.cancel();
     _trackPrefTimer?.cancel();
+    _castSessionSub?.cancel();
+    _castMediaSub?.cancel();
+    _castPositionSub?.cancel();
+    if (!_navigatingToEpisode && CastService.instance.isConnected) {
+      unawaited(CastService.instance.disconnect());
+    } else {
+      unawaited(CastService.instance.stopDiscovery());
+    }
     _controller?.dispose();
 
     _restoreExitOrientations();
@@ -1316,8 +1648,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Widget build(BuildContext context) {
     return PopScope(
       onPopInvoked: (didPop) async {
+        if (!_navigatingToEpisode && CastService.instance.isConnected) {
+          await CastService.instance.disconnect();
+        }
         if (_controller != null) {
-          await _controller!.stop();
+          try {
+            await _controller!.stop();
+          } catch (_) {}
         }
 
         _restoreExitOrientations();
@@ -1405,7 +1742,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     return Stack(
       children: [
-        // Video Player
         Center(
           child: VlcPlayer(
             controller: _controller!,
@@ -1416,10 +1752,50 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ),
         ),
 
-        // Gelişmiş Kontroller
         _buildControls(),
 
-        if (_showNextEpisodeCta && _hasNextEpisode)
+        if (_isCasting)
+          Positioned(
+            left: 16,
+            right: 16,
+            top: 72,
+            child: SafeArea(
+              child: Material(
+                color: Colors.blue.shade800.withValues(alpha: 0.92),
+                borderRadius: BorderRadius.circular(8),
+                child: Padding(
+                  padding:
+                      const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _isAirPlaying
+                            ? Icons.airplay
+                            : Icons.cast_connected,
+                        color: Colors.white,
+                      ),
+                      const SizedBox(width: 10),
+                      const Expanded(
+                        child: Text(
+                          'TV’ye yansıtılıyor',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                      TextButton(
+                        onPressed: _stopCasting,
+                        child: const Text(
+                          'Durdur',
+                          style: TextStyle(color: Colors.white),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ),
+          ),
+
+        if (_showNextEpisodeCta && _hasNextEpisode && !_isAirPlaying)
           Positioned(
             right: 16,
             bottom: 96,
@@ -1515,10 +1891,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     IconButton(
                       iconSize: playIconSize,
                       icon: Icon(
-                        _controller != null && _controller!.value.isPlaying
+                        _isRemotePlaying
                             ? Icons.pause_circle_filled
                             : (_controller != null &&
-                                    _controller!.value.isEnded
+                                    _controller!.value.isEnded &&
+                                    !_isCasting
                                 ? Icons.replay_circle_filled
                                 : Icons.play_circle_filled),
                         color: Colors.white,
@@ -1574,8 +1951,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
                               ? _totalDuration.inSeconds.toDouble()
                               : 1,
                           onChanged: (value) {
-                            _controller!
-                                .seekTo(Duration(seconds: value.toInt()));
+                            final target = Duration(seconds: value.toInt());
+                            setState(() => _currentPosition = target);
+                            if (_isCasting && !_isAirPlaying) {
+                              CastService.instance.seekTo(target);
+                            } else {
+                              _controller?.seekTo(target);
+                            }
                             _startHideControlsTimer();
                           },
                           onChangeStart: (value) {
@@ -1681,6 +2063,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
             ),
             PopupMenuItem(
+              value: 'cast',
+              child: Row(
+                children: [
+                  Icon(
+                    _isCasting ? Icons.cast_connected : Icons.cast,
+                    size: 20,
+                    color: _isCasting ? Colors.blue : null,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(_isCasting ? 'Yansıtmayı Durdur' : 'TV’ye Yansıt'),
+                ],
+              ),
+            ),
+            PopupMenuItem(
               value: 'fullscreen',
               child: Row(
                 children: [
@@ -1745,6 +2141,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
               onPressed: _toggleFavorite,
             ),
+            IconButton(
+              icon: Icon(
+                _isCasting ? Icons.cast_connected : Icons.cast,
+                color: _isCasting ? Colors.blue : Colors.white,
+              ),
+              tooltip: _isCasting ? 'Yansıtmayı Durdur' : 'TV’ye Yansıt',
+              onPressed: () {
+                if (_isCasting) {
+                  _stopCasting();
+                } else {
+                  _castToDevice();
+                }
+              },
+            ),
             // Altyazı butonu (dinamik liste)
             IconButton(
               icon: const Icon(Icons.subtitles, color: Colors.white),
@@ -1795,7 +2205,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   // PopupMenu seçimlerini işle
-  void _handleMenuSelection(String value) {
+  Future<void> _handleMenuSelection(String value) async {
     switch (value) {
       case 'favorite':
         _toggleFavorite();
@@ -1806,25 +2216,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
       case 'subtitles':
         _showSubtitlesDialog();
         break;
+      case 'cast':
+        if (_isCasting) {
+          await _stopCasting();
+        } else {
+          await _castToDevice();
+        }
+        break;
       case 'fullscreen':
         setState(() {
           _isFullScreen = !_isFullScreen;
         });
-
-        // Ekran yönlendirmesini ayarla
-        if (_isFullScreen) {
-          SystemChrome.setPreferredOrientations([
-            DeviceOrientation.landscapeLeft,
-            DeviceOrientation.landscapeRight,
-          ]);
-        } else {
-          SystemChrome.setPreferredOrientations([
-            DeviceOrientation.portraitUp,
-            DeviceOrientation.portraitDown,
-            DeviceOrientation.landscapeLeft,
-            DeviceOrientation.landscapeRight,
-          ]);
-        }
+        _applyPlayerOrientations();
         break;
     }
     _startHideControlsTimer();

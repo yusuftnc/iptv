@@ -1,9 +1,12 @@
+import 'dart:async';
+
 import 'package:hive/hive.dart';
 import 'package:iptv_app/utils/logger.dart';
 import '../models/favorite_item.dart';
 import '../models/watch_history.dart';
 import '../models/user_settings.dart';
 import '../models/content_item.dart';
+import 'cloud_sync_service.dart';
 
 /// Birden fazla " - S01E" biriktiyse dizi kökü + son bölüm tek satırda (eski bug + yeni kayıt).
 String _oneLineSeriesHistoryName(String name) {
@@ -26,6 +29,8 @@ class DatabaseService {
   }
 
   DatabaseService._internal();
+
+  bool _applyingRemote = false;
 
   Future<void> _repairSeriesWatchNames(Box<WatchHistory> box) async {
     for (final key in box.keys.toList()) {
@@ -74,11 +79,17 @@ class DatabaseService {
     );
 
     await box.put(contentItem.id, favorite);
+    if (!_applyingRemote) {
+      unawaited(CloudSyncService.instance.pushFavorite(favorite));
+    }
   }
 
   Future<void> removeFavorite(String contentId) async {
     final box = await Hive.openBox<FavoriteItem>(_favoritesBox);
     await box.delete(contentId);
+    if (!_applyingRemote) {
+      unawaited(CloudSyncService.instance.deleteFavorite(contentId));
+    }
   }
 
   Future<bool> isFavorite(String contentId) async {
@@ -121,6 +132,9 @@ class DatabaseService {
       // Aynı içerik zaten varsa güncelle, key = historyId
       final key = contentItem.historyId;
       await box.put(key, watchItem);
+      if (!_applyingRemote) {
+        CloudSyncService.instance.scheduleWatchPush(watchItem);
+      }
 
       // Kaydettikten sonra kontrol et (Hive anahtarı historyId)
       final savedItem = box.get(key);
@@ -134,11 +148,77 @@ class DatabaseService {
   Future<void> removeFromWatchHistory(String contentId) async {
     final box = await Hive.openBox<WatchHistory>(_watchHistoryBox);
     await box.delete(contentId);
+    if (!_applyingRemote) {
+      unawaited(CloudSyncService.instance.deleteWatch(contentId));
+    }
   }
 
   Future<void> clearWatchHistory() async {
     final box = await Hive.openBox<WatchHistory>(_watchHistoryBox);
     await box.clear();
+    if (!_applyingRemote) {
+      unawaited(CloudSyncService.instance.clearRemoteWatch());
+    }
+  }
+
+  Future<void> clearLocalLibrary() async {
+    _applyingRemote = true;
+    try {
+      final favorites = await Hive.openBox<FavoriteItem>(_favoritesBox);
+      final history = await Hive.openBox<WatchHistory>(_watchHistoryBox);
+      await favorites.clear();
+      await history.clear();
+    } finally {
+      _applyingRemote = false;
+    }
+  }
+
+  Future<void> applyRemoteFavorite(FavoriteItem item) async {
+    _applyingRemote = true;
+    try {
+      final box = await Hive.openBox<FavoriteItem>(_favoritesBox);
+      final existing = box.get(item.id);
+      if (existing != null && existing.addedDate.isAfter(item.addedDate)) {
+        return;
+      }
+      await box.put(item.id, item);
+    } finally {
+      _applyingRemote = false;
+    }
+  }
+
+  Future<void> applyRemoteFavoriteDelete(String contentId) async {
+    _applyingRemote = true;
+    try {
+      final box = await Hive.openBox<FavoriteItem>(_favoritesBox);
+      await box.delete(contentId);
+    } finally {
+      _applyingRemote = false;
+    }
+  }
+
+  Future<void> applyRemoteWatch(WatchHistory item) async {
+    _applyingRemote = true;
+    try {
+      final box = await Hive.openBox<WatchHistory>(_watchHistoryBox);
+      final existing = box.get(item.historyId);
+      if (existing != null && existing.watchDate.isAfter(item.watchDate)) {
+        return;
+      }
+      await box.put(item.historyId, item);
+    } finally {
+      _applyingRemote = false;
+    }
+  }
+
+  Future<void> applyRemoteWatchDelete(String historyId) async {
+    _applyingRemote = true;
+    try {
+      final box = await Hive.openBox<WatchHistory>(_watchHistoryBox);
+      await box.delete(historyId);
+    } finally {
+      _applyingRemote = false;
+    }
   }
 
   Future<List<WatchHistory>> getLastWatched(String contentType,

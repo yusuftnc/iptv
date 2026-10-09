@@ -1,7 +1,8 @@
 import 'package:flutter/material.dart';
+import '../services/cloud_sync_service.dart';
 import '../services/storage_service.dart';
 import '../services/iptv_service.dart';
-import 'login_screen.dart';
+import 'discover_screen.dart';
 import 'home_screen.dart';
 
 class SplashScreen extends StatefulWidget {
@@ -42,7 +43,13 @@ class _SplashScreenState extends State<SplashScreen> {
       final loginSuccess = await iptvService.login();
       
       if (loginSuccess && mounted) {
-        // Giriş başarılı, ana ekrana git
+        await CloudSyncService.instance.start(
+          host: credentials['host']!,
+          port: credentials['port']!,
+          username: credentials['username']!,
+          password: credentials['password']!,
+        );
+        if (!mounted) return;
         Navigator.pushReplacement(
           context,
           PageRouteBuilder(
@@ -58,7 +65,7 @@ class _SplashScreenState extends State<SplashScreen> {
         Navigator.pushReplacement(
           context,
           PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
+            pageBuilder: (context, animation, secondaryAnimation) => const DiscoverScreen(),
             transitionsBuilder: (context, animation, secondaryAnimation, child) {
               return FadeTransition(opacity: animation, child: child);
             },
@@ -71,7 +78,7 @@ class _SplashScreenState extends State<SplashScreen> {
       Navigator.pushReplacement(
         context,
         PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => const LoginScreen(),
+          pageBuilder: (context, animation, secondaryAnimation) => const DiscoverScreen(),
           transitionsBuilder: (context, animation, secondaryAnimation, child) {
             return FadeTransition(opacity: animation, child: child);
           },
