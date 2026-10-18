@@ -524,6 +524,12 @@ final class FlutterVlcPlayer implements PlatformView {
         //  android -> chromecast -> "microdns"
         //  ios -> chromecast -> "Bonjour_renderer"
         //
+        if (rendererDiscoverers != null) {
+            for (RendererDiscoverer previous : rendererDiscoverers) {
+                previous.stop();
+                previous.setEventListener(null);
+            }
+        }
         rendererDiscoverers = new ArrayList<>();
         rendererItems = new ArrayList<>();
         //

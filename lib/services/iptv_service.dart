@@ -473,21 +473,52 @@ class IptvService {
     };
   }
 
-  // URL'in gerçekten çalışıp çalışmadığını küçük bir GET (Range: 0-0) isteğiyle kontrol et
+  // İlk baytlara bak. Panel yanlış uzantıya da 200 döndürebilir; o adres
+  // önbelleğe yazılırsa VLC açılmaz ve "Devam Et" siyah kalır.
   Future<bool> _urlWorks(String url) async {
     try {
       final response = await http
           .get(
             Uri.parse(url),
-            headers: const {'Range': 'bytes=0-0'}, // sadece ilk bayt
+            headers: const {'Range': 'bytes=0-15'},
           )
-          .timeout(const Duration(seconds: 3));
+          .timeout(const Duration(seconds: 4));
 
-      // Çoğu sunucu 200 (OK) ya da 206 (Partial Content) döndürür
-      return response.statusCode == 200 || response.statusCode == 206;
+      if (response.statusCode != 200 && response.statusCode != 206) {
+        return false;
+      }
+      final type = (response.headers['content-type'] ?? '').toLowerCase();
+      if (type.contains('text/html') ||
+          type.contains('application/json') ||
+          type.contains('text/plain')) {
+        return false;
+      }
+      return _bytesMatchUrl(response.bodyBytes, url);
     } catch (_) {
       return false;
     }
+  }
+
+  bool _bytesMatchUrl(List<int> bytes, String url) {
+    if (bytes.length < 4) return false;
+    final path = url.toLowerCase();
+    final isMkv = bytes[0] == 0x1A &&
+        bytes[1] == 0x45 &&
+        bytes[2] == 0xDF &&
+        bytes[3] == 0xA3;
+    final isMp4 = bytes.length >= 8 &&
+        bytes[4] == 0x66 &&
+        bytes[5] == 0x74 &&
+        bytes[6] == 0x79 &&
+        bytes[7] == 0x70;
+    final isTs = bytes[0] == 0x47;
+    final isHls = bytes[0] == 0x23;
+
+    if (path.contains('.mkv')) return isMkv;
+    if (path.contains('.mp4')) return isMp4;
+    if (path.contains('.ts')) return isTs;
+    if (path.contains('.m3u8')) return isHls || isTs;
+    return isMkv || isMp4 || isTs || isHls;
   }
 
   // TV Kanallarını getir

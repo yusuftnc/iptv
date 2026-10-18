@@ -266,6 +266,10 @@ public class VLCViewController: NSObject, FlutterPlatformView {
     
     public func startRendererScanning() {
         
+        for rendererDiscoverer in rendererdiscoverers {
+            rendererDiscoverer.stop()
+            rendererDiscoverer.delegate = nil
+        }
         rendererdiscoverers.removeAll()
         rendererEventChannelHandler.renderItems.removeAll()
         // chromecast service name: "Bonjour_renderer"
@@ -310,10 +314,16 @@ public class VLCViewController: NSObject, FlutterPlatformView {
         if (self.vlcMediaPlayer.isPlaying){
             self.vlcMediaPlayer.pause()
         }
-        let rendererItems = self.rendererEventChannelHandler.renderItems
-        let rendererItem = rendererItems.first{
-            $0.name.contains(rendererDevice ?? "")
+        let query = (rendererDevice ?? "").trimmingCharacters(in: .whitespacesAndNewlines)
+        // Boş ad: yerel oynatmaya dön. contains("") her cihaza uyar.
+        if query.isEmpty {
+            self.vlcMediaPlayer.setRendererItem(nil)
+            self.vlcMediaPlayer.play()
+            return
         }
+        let rendererItems = self.rendererEventChannelHandler.renderItems
+        let rendererItem = rendererItems.first { $0.name == query }
+            ?? rendererItems.first { $0.name.contains(query) }
         self.vlcMediaPlayer.setRendererItem(rendererItem)
         self.vlcMediaPlayer.play()
     }

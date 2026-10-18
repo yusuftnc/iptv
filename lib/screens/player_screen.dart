@@ -9,7 +9,6 @@ import '../services/database_service.dart';
 import '../services/storage_service.dart';
 import '../services/cloud_sync_service.dart';
 import '../services/cast_service.dart';
-import '../models/cast_pick_result.dart';
 import 'package:flutter_chrome_cast/entities.dart';
 import 'package:flutter_chrome_cast/enums.dart';
 import '../widgets/cast_device_picker.dart';
@@ -127,7 +126,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _playlistIndex! < _playlist!.length - 1;
 
   bool get _isRemotePlaying =>
-      _isCasting && !_isAirPlaying
+      _googleCastControls
           ? _isCastPlaying
           : (_controller != null && _controller!.value.isPlaying);
 
@@ -145,8 +144,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Sonraki/önceki bölüme geçerken dispose portreye zorlamasın.
   bool _navigatingToEpisode = false;
   bool _isCasting = false;
+  /// libvlc renderer: TV telefonun seçtiği sesi çalar, kontrol yerelde kalır.
+  bool _vlcCasting = false;
+  String? _vlcCastDeviceId;
+  String? _vlcCastDeviceName;
   /// AirPlay: VLC yerine AVPlayer + sistem AirPlay picker kullanılır.
   bool _isAirPlaying = false;
+
+  bool get _googleCastControls =>
+      _isCasting && !_isAirPlaying && !_vlcCasting;
   StreamSubscription<GoogleCastSession?>? _castSessionSub;
   StreamSubscription<GoggleCastMediaStatus?>? _castMediaSub;
   StreamSubscription<Duration>? _castPositionSub;
@@ -184,7 +190,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (!mounted || _stoppingCast || _resumingLocal) return;
       final connected =
           session?.connectionState == GoogleCastConnectState.connected;
-      if (_isCasting && !_isAirPlaying && !connected) {
+      if (_googleCastControls && !connected) {
         setState(() => _isCasting = false);
         _resumeLocalAfterCast();
         ScaffoldMessenger.of(context).showSnackBar(
@@ -194,7 +200,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     });
 
     _castMediaSub = CastService.instance.mediaStatusStream.listen((status) {
-      if (!mounted || !_isCasting || _isAirPlaying) return;
+      if (!mounted || !_googleCastControls) return;
       final playing = status?.playerState == CastMediaPlayerState.playing ||
           status?.playerState == CastMediaPlayerState.buffering;
       final duration = status?.mediaInformation?.duration;
@@ -207,7 +213,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     });
 
     _castPositionSub = CastService.instance.playerPositionStream.listen((pos) {
-      if (!mounted || !_isCasting || _isAirPlaying || _isDraggingProgress) {
+      if (!mounted || !_googleCastControls || _isDraggingProgress) {
         return;
       }
       setState(() => _currentPosition = pos);
@@ -229,6 +235,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (_isCasting || _isAirPlaying) {
         setState(() {
           _isCasting = false;
+          _vlcCasting = false;
+          _vlcCastDeviceId = null;
+          _vlcCastDeviceName = null;
           _isAirPlaying = false;
           _showControls = true;
         });
@@ -672,10 +681,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
       // İçerik türüne göre stream URL'ini al
       String? streamUrl;
 
-      if (widget.streamUrl != null && widget.streamUrl.isNotEmpty) {
-        // Eğer ContentItem'da zaten bir URL varsa, onu kullan
+      final playlistUrl = _playlist
+          ?.where((e) => e.id == widget.contentId)
+          .map((e) => e.streamUrl)
+          .whereType<String>()
+          .where((url) => url.isNotEmpty)
+          .firstOrNull;
+
+      if (widget.streamUrl.isNotEmpty) {
         streamUrl = widget.streamUrl;
         Log.d("DBG", 'Debug - ContentItem\'dan URL kullanılıyor: $streamUrl');
+      } else if (playlistUrl != null) {
+        streamUrl = playlistUrl;
+        Log.d("DBG", 'Debug - Bölüm listesinden URL kullanılıyor: $streamUrl');
       } else {
         // Yoksa, servis üzerinden URL'i al
         final streamType = widget.contentType ?? 'live';
@@ -885,7 +903,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _seekForward() async {
-    if (_isCasting && !_isAirPlaying) {
+    if (_googleCastControls) {
       await CastService.instance.seekBy(const Duration(seconds: 10));
       _startHideControlsTimer();
       return;
@@ -903,7 +921,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _seekBackward() async {
-    if (_isCasting && !_isAirPlaying) {
+    if (_googleCastControls) {
       await CastService.instance.seekBy(const Duration(seconds: -10));
       _startHideControlsTimer();
       return;
@@ -1123,7 +1141,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _positionUpdateTimer?.cancel();
     _positionUpdateTimer =
         Timer.periodic(const Duration(milliseconds: 500), (timer) {
-      if (_isCasting && !_isAirPlaying) return;
+      if (_googleCastControls) return;
       if (_controller != null && mounted) {
         final position = _controller!.value.position;
         final duration = _controller!.value.duration;
@@ -1237,8 +1255,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _castToDevice() async {
-    final url = _streamUrlForStorage;
-    if (url.isEmpty) {
+    final controller = _controller;
+    if (controller == null || !controller.value.isInitialized) {
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Yansıtılacak yayın henüz hazır değil')),
@@ -1249,54 +1267,43 @@ class _PlayerScreenState extends State<PlayerScreen> {
     await _waitForPopupToClose();
     if (!mounted) return;
 
-    final pick = await showCastDevicePicker(context);
+    final pick = await showVlcRendererPicker(context, controller);
     if (pick == null || !mounted) return;
 
-    if (pick is! CastPickGoogleCast) return;
-    final device = pick.device;
-
     try {
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${device.friendlyName} bağlanıyor…'),
-          ),
-        );
-      }
-
-      await CastService.instance.connectAndPlay(
-        device: device,
-        streamUrl: url,
-        title: widget.name,
-        contentType: widget.contentType,
-        imageUrl: widget.streamIcon,
-        position: _currentPosition,
-        preferredAudioLabel: _preferredAudioLabel,
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('${pick.name} bağlanıyor…')),
       );
 
-      try {
-        await _controller?.pause();
-      } catch (_) {}
+      await controller.castToRenderer(pick.id);
 
+      if (!mounted) return;
+      setState(() {
+        _isAirPlaying = false;
+        _isCasting = true;
+        _vlcCasting = true;
+        _vlcCastDeviceId = pick.id;
+        _vlcCastDeviceName = pick.name;
+        _isCastPlaying = true;
+        _showControls = true;
+      });
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            '${pick.name} üzerinde oynatılıyor. Ses telefonda seçili olan.',
+          ),
+          backgroundColor: Colors.green,
+        ),
+      );
+    } catch (e) {
+      Log.d('Cast', 'vlc cast error: $e');
       if (mounted) {
         setState(() {
-          _isAirPlaying = false;
-          _isCasting = true;
-          _isCastPlaying = true;
-          _showControls = true;
+          _isCasting = false;
+          _vlcCasting = false;
+          _vlcCastDeviceId = null;
+          _vlcCastDeviceName = null;
         });
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(
-            content: Text('${device.friendlyName} üzerinde oynatılıyor'),
-            backgroundColor: Colors.green,
-          ),
-        );
-      }
-    } catch (e) {
-      Log.d('Cast', 'cast error: $e');
-      await _resumeLocalAfterCast();
-      if (mounted) {
-        setState(() => _isCasting = false);
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
             content: Text('Yansıtma başarısız: $e'),
@@ -1330,9 +1337,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _teardownRemotePlayback({bool showSnack = false}) async {
     _stoppingCast = true;
-    final wasGoogleCast = _isCasting && !_isAirPlaying;
+    final wasVlcCast = _vlcCasting;
+    final wasGoogleCast = _googleCastControls;
     final wasAirPlay = _isAirPlaying;
-    if (wasGoogleCast) {
+    if (wasVlcCast) {
+      final controller = _controller;
+      try {
+        await controller?.castToRenderer('');
+      } catch (e) {
+        Log.d('Cast', 'vlc detach: $e');
+      }
+      try {
+        await controller?.stopRendererScanning();
+      } catch (_) {}
+      await CastService.instance.restoreLocalAudio();
+      try {
+        await controller?.play();
+      } catch (e) {
+        Log.d('Cast', 'vlc local resume: $e');
+      }
+    } else if (wasGoogleCast) {
       try {
         await CastService.instance.disconnect();
       } catch (_) {}
@@ -1344,6 +1368,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
     setState(() {
       _isAirPlaying = false;
       _isCasting = false;
+      _vlcCasting = false;
+      _vlcCastDeviceId = null;
+      _vlcCastDeviceName = null;
       _isCastPlaying = false;
       _showControls = true;
     });
@@ -1353,9 +1380,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (mounted) {
         await _initializePlayer();
       }
-    } else if (wasGoogleCast) {
+    } else if (wasGoogleCast && !wasVlcCast) {
       await _resumeLocalAudioAfterCast();
-    } else {
+    } else if (!wasVlcCast) {
       try {
         await _controller?.play();
       } catch (e) {
@@ -1371,7 +1398,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _togglePlayPause() async {
-    if (_isCasting && !_isAirPlaying) {
+    if (_googleCastControls) {
       try {
         if (_isCastPlaying) {
           await CastService.instance.pause();
@@ -1584,8 +1611,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _audioPrefApplied = true;
     await _storageService.savePreferredAudioTrack(label);
     Log.d('DBG', 'Audio preference saved: $label');
-    // Cast sırasında seçimi TV'deki yayına da uygula.
-    if (_isCasting && !_isAirPlaying) {
+    final castDeviceId = _vlcCastDeviceId;
+    if (_vlcCasting && castDeviceId != null) {
+      try {
+        await _controller!.castToRenderer(castDeviceId);
+      } catch (e) {
+        Log.d('Cast', 'vlc audio reapply: $e');
+      }
+    } else if (_googleCastControls) {
       unawaited(CastService.instance.applyPreferredAudioByLabel(label));
     }
     _startHideControlsTimer();
@@ -1641,7 +1674,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _castSessionSub?.cancel();
     _castMediaSub?.cancel();
     _castPositionSub?.cancel();
-    if (!_navigatingToEpisode && CastService.instance.isConnected) {
+    if (_vlcCasting) {
+      final controller = _controller;
+      if (controller != null) {
+        unawaited(controller.castToRenderer(''));
+      }
+    } else if (!_navigatingToEpisode && CastService.instance.isConnected) {
       unawaited(CastService.instance.disconnect());
     } else {
       unawaited(CastService.instance.stopDiscovery());
@@ -1789,10 +1827,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
                         color: Colors.white,
                       ),
                       const SizedBox(width: 10),
-                      const Expanded(
+                      Expanded(
                         child: Text(
-                          'TV’ye yansıtılıyor',
-                          style: TextStyle(color: Colors.white),
+                          _vlcCasting
+                              ? 'TV’ye yansıtılıyor · ses telefondan'
+                              : 'TV’ye yansıtılıyor',
+                          style: const TextStyle(color: Colors.white),
                         ),
                       ),
                       TextButton(
@@ -1987,7 +2027,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 onChanged: (value) {
                   final target = Duration(seconds: value.toInt());
                   setState(() => _currentPosition = target);
-                  if (_isCasting && !_isAirPlaying) {
+                  if (_googleCastControls) {
                     CastService.instance.seekTo(target);
                   } else {
                     _controller?.seekTo(target);

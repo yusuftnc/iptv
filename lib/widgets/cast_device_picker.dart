@@ -4,8 +4,41 @@ import 'dart:io';
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_chrome_cast/entities.dart';
+import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import '../models/cast_pick_result.dart';
 import '../services/cast_service.dart';
+import '../utils/logger.dart';
+
+class VlcRendererPick {
+  final String id;
+  final String name;
+  const VlcRendererPick(this.id, this.name);
+}
+
+/// libvlc Chromecast taraması. TV, telefonun seçtiği sesi alır.
+Future<VlcRendererPick?> showVlcRendererPicker(
+  BuildContext context,
+  VlcPlayerController controller,
+) {
+  final maxHeight = MediaQuery.sizeOf(context).height * 0.7;
+  return showModalBottomSheet<VlcRendererPick>(
+    context: context,
+    useRootNavigator: true,
+    backgroundColor: Colors.grey[900],
+    isScrollControlled: true,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(16)),
+    ),
+    builder: (context) {
+      return SafeArea(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxHeight: maxHeight),
+          child: _VlcRendererPickerBody(controller: controller),
+        ),
+      );
+    },
+  );
+}
 
 /// Aynı Wi-Fi üzerindeki Cast hedeflerini listeler.
 Future<CastPickResult?> showCastDevicePicker(BuildContext context) async {
@@ -227,6 +260,164 @@ bool _looksLikeHardwareCode(String model) {
   final compact = model.replaceAll(RegExp(r'[\s\-_]'), '');
   if (compact.length <= 4) return true;
   return RegExp(r'^[A-Za-z]{0,3}\d{1,4}[A-Za-z0-9]*$').hasMatch(compact);
+}
+
+class _VlcRendererPickerBody extends StatefulWidget {
+  final VlcPlayerController controller;
+  const _VlcRendererPickerBody({required this.controller});
+
+  @override
+  State<_VlcRendererPickerBody> createState() => _VlcRendererPickerBodyState();
+}
+
+class _VlcRendererPickerBodyState extends State<_VlcRendererPickerBody> {
+  Map<String, String> _devices = {};
+  Timer? _poll;
+
+  @override
+  void initState() {
+    super.initState();
+    widget.controller.addOnRendererEventListener(_onRenderer);
+    _start();
+  }
+
+  Future<void> _start() async {
+    try {
+      final services = await widget.controller.getAvailableRendererServices();
+      Log.d('Cast', 'vlc renderer services: $services');
+      await widget.controller.startRendererScanning();
+    } catch (e) {
+      Log.d('Cast', 'vlc scan start: $e');
+    }
+    await _reload();
+    _poll ??= Timer.periodic(const Duration(milliseconds: 700), (_) {
+      _reload();
+    });
+  }
+
+  void _onRenderer(VlcRendererEventType type, String id, String name) {
+    Log.d('Cast', 'vlc renderer $type $id ($name)');
+    _reload();
+  }
+
+  Future<void> _reload() async {
+    if (!mounted) return;
+    try {
+      final found = await widget.controller.getRendererDevices();
+      if (!mounted) return;
+      setState(() => _devices = found);
+    } catch (e) {
+      Log.d('Cast', 'vlc devices: $e');
+    }
+  }
+
+  @override
+  void dispose() {
+    _poll?.cancel();
+    widget.controller.removeOnRendererEventListener(_onRenderer);
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final entries = _devices.entries.toList();
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Center(
+            child: Container(
+              width: 36,
+              height: 4,
+              margin: const EdgeInsets.only(bottom: 12),
+              decoration: BoxDecoration(
+                color: Colors.white24,
+                borderRadius: BorderRadius.circular(2),
+              ),
+            ),
+          ),
+          const Row(
+            children: [
+              Icon(Icons.cast, color: Colors.white),
+              SizedBox(width: 12),
+              Expanded(
+                child: Text(
+                  'Yansıtılacak cihaz',
+                  style: TextStyle(
+                    color: Colors.white,
+                    fontSize: 18,
+                    fontWeight: FontWeight.bold,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          const Text(
+            'Ses, telefonda seçili olan parça olarak gider. '
+            'Yayın bitene kadar uygulama açık kalmalı.',
+            style: TextStyle(color: Colors.white70, fontSize: 13),
+          ),
+          const SizedBox(height: 12),
+          Expanded(
+            child: entries.isEmpty
+                ? const Center(
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        CircularProgressIndicator(),
+                        SizedBox(height: 16),
+                        Text(
+                          'Cihazlar aranıyor…',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 16,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                        SizedBox(height: 8),
+                        Text(
+                          'Telefon ve televizyon aynı Wi-Fi ağında olmalı.',
+                          textAlign: TextAlign.center,
+                          style: TextStyle(color: Colors.white70, fontSize: 13),
+                        ),
+                      ],
+                    ),
+                  )
+                : ListView.separated(
+                    itemCount: entries.length,
+                    separatorBuilder: (_, __) =>
+                        const Divider(color: Colors.white12, height: 1),
+                    itemBuilder: (context, index) {
+                      final entry = entries[index];
+                      final label = entry.value.trim().isEmpty
+                          ? entry.key
+                          : entry.value;
+                      return ListTile(
+                        leading: const Icon(Icons.tv, color: Colors.white),
+                        title: Text(
+                          label,
+                          style: const TextStyle(color: Colors.white),
+                        ),
+                        trailing: const Icon(
+                          Icons.chevron_right,
+                          color: Colors.white38,
+                        ),
+                        onTap: () {
+                          Navigator.pop(
+                            context,
+                            VlcRendererPick(entry.key, label),
+                          );
+                        },
+                      );
+                    },
+                  ),
+          ),
+        ],
+      ),
+    );
+  }
 }
 
 IconData _deviceIcon(GoogleCastDevice device) {

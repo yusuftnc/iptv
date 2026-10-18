@@ -281,12 +281,31 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
   void _resumeLastEpisode() {
     if (_resumeHistory == null) return;
 
+    final episodeUrl = _urlForEpisode(_resumeHistory!.contentId);
     _openPlayer(
       contentId: _resumeHistory!.contentId,
       name: _resumeHistory!.name,
-      streamUrl: _resumeHistory!.streamUrl,
+      streamUrl: (episodeUrl != null && episodeUrl.isNotEmpty)
+          ? episodeUrl
+          : _resumeHistory!.streamUrl,
       streamIcon: _resumeHistory!.streamIcon,
     );
+  }
+
+  String? _urlForEpisode(String episodeId) {
+    for (final episodes in _episodesBySeason.values) {
+      for (final episode in episodes) {
+        if (episode['id']?.toString() != episodeId) continue;
+        final ext = episode['container_extension']?.toString() ?? '';
+        if (ext.isEmpty) return null;
+        final server = _iptvService.getServerUrl();
+        final user = _iptvService.getUsername();
+        final pass = _iptvService.getPassword();
+        if (server == null || user == null || pass == null) return null;
+        return '$server/series/$user/$pass/$episodeId.$ext';
+      }
+    }
+    return null;
   }
 
   @override
