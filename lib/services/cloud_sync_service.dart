@@ -5,6 +5,7 @@ import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:crypto/crypto.dart';
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:firebase_core/firebase_core.dart';
+import 'package:flutter/widgets.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/env.dart';
@@ -16,17 +17,28 @@ import 'database_service.dart';
 
 /// IPTV girişi aynı olan cihazlar favori ve izleme konumunu paylaşır.
 /// Kimlik = normalize sunucu (host+port) + username. Şifre anahtara girmez.
-class CloudSyncService {
+class CloudSyncService with WidgetsBindingObserver {
   CloudSyncService._();
   static final CloudSyncService instance = CloudSyncService._();
 
   static const _profileKey = 'cloud_sync_profile';
-  static const _watchDebounce = Duration(seconds: 8);
+  static const _watchDebounce = Duration(seconds: 3);
+  static const _cloudTimeout = Duration(seconds: 8);
+  static const _fullPullFreshness = Duration(seconds: 4);
 
   bool _ready = false;
   bool _started = false;
+  bool _observingLifecycle = false;
   Timer? _watchTimer;
+  Timer? _notifyTimer;
+  DateTime? _lastFullPullAt;
+  Future<void>? _inFlightPull;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _favSub;
+  StreamSubscription<QuerySnapshot<Map<String, dynamic>>>? _histSub;
   final Map<String, WatchHistory> _pendingWatch = {};
+
+  /// Hive güncellenince ana sayfa / listeler yenilensin.
+  final ValueNotifier<int> revision = ValueNotifier(0);
 
   bool get isActive => _ready && _started && FirebaseAuth.instance.currentUser != null;
 
@@ -44,8 +56,10 @@ class CloudSyncService {
       await _signIn(host: host, port: port, username: username);
       _started = true;
       await _switchLocalProfileIfNeeded(_profileId(host, port, username));
-      await pullAndMerge();
+      await pullAndMerge(force: true);
       await flush();
+      _listen();
+      _ensureLifecycleObserver();
       Log.d('CloudSync', 'Hazır uid=${FirebaseAuth.instance.currentUser?.uid}');
     } catch (e, st) {
       Log.e('CloudSync', e, st);
@@ -55,6 +69,16 @@ class CloudSyncService {
   Future<void> stop() async {
     _watchTimer?.cancel();
     _watchTimer = null;
+    _notifyTimer?.cancel();
+    _notifyTimer = null;
+    await _favSub?.cancel();
+    await _histSub?.cancel();
+    _favSub = null;
+    _histSub = null;
+    if (_observingLifecycle) {
+      WidgetsBinding.instance.removeObserver(this);
+      _observingLifecycle = false;
+    }
     await flush();
     _started = false;
     try {
@@ -63,6 +87,17 @@ class CloudSyncService {
       }
     } catch (e) {
       Log.d('CloudSync', 'signOut: $e');
+    }
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.paused ||
+        state == AppLifecycleState.hidden ||
+        state == AppLifecycleState.inactive) {
+      unawaited(flush());
+    } else if (state == AppLifecycleState.resumed) {
+      unawaited(pullAndMerge(force: true));
     }
   }
 
@@ -152,55 +187,195 @@ class CloudSyncService {
     }
   }
 
-  Future<void> pullAndMerge() async {
-    if (FirebaseAuth.instance.currentUser == null) return;
-    final db = DatabaseService();
-
+  Future<void> pullFavorites() async {
+    if (!isActive) return;
     try {
-      final favSnap = await _favorites.get();
-      final remoteFavIds = <String>{};
-      for (final doc in favSnap.docs) {
-        final data = doc.data();
-        final id = (data['id'] as String?) ?? doc.id;
-        remoteFavIds.add(id);
-        final deleted = data['deleted'] == true;
-        if (deleted) {
-          await db.applyRemoteFavoriteDelete(id);
-          continue;
-        }
-        await db.applyRemoteFavorite(_favoriteFromMap(data, id));
-      }
-
-      final histSnap = await _history.get();
-      final remoteHistIds = <String>{};
-      for (final doc in histSnap.docs) {
-        final data = doc.data();
-        final id = (data['historyId'] as String?) ?? doc.id;
-        remoteHistIds.add(id);
-        final deleted = data['deleted'] == true;
-        if (deleted) {
-          await db.applyRemoteWatchDelete(id);
-          continue;
-        }
-        await db.applyRemoteWatch(_watchFromMap(data, id));
-      }
-
-      final localFavs = await db.getFavorites();
-      for (final fav in localFavs) {
-        if (!remoteFavIds.contains(fav.id)) {
-          await pushFavorite(fav);
-        }
-      }
-
-      final localHist = await db.getWatchHistory();
-      for (final item in localHist) {
-        if (!remoteHistIds.contains(item.historyId)) {
-          _pendingWatch[item.historyId] = item;
-        }
-      }
+      final snap = await _favorites.get().timeout(_cloudTimeout);
+      await _applyFavoriteDocs(snap.docs, backfillLocal: true);
+      _bump();
     } catch (e, st) {
       Log.e('CloudSync', e, st);
     }
+  }
+
+  Future<void> pullWatchHistory() async {
+    if (!isActive) return;
+    try {
+      final snap = await _history.get().timeout(_cloudTimeout);
+      await _applyWatchDocs(snap.docs, backfillLocal: true);
+      _bump();
+    } catch (e, st) {
+      Log.e('CloudSync', e, st);
+    }
+  }
+
+  /// Film / dizi açılırken o kaydın güncel saniyesini Firestore'dan alır.
+  Future<WatchHistory?> pullWatchItem(String historyId) async {
+    if (historyId.isEmpty) return DatabaseService().getWatchPosition(historyId);
+    if (!isActive) return DatabaseService().getWatchPosition(historyId);
+
+    try {
+      final doc = await _history.doc(historyId).get().timeout(_cloudTimeout);
+      final db = DatabaseService();
+      if (!doc.exists) {
+        return await db.getWatchPosition(historyId);
+      }
+      final data = doc.data() ?? {};
+      if (data['deleted'] == true) {
+        await db.applyRemoteWatchDelete(historyId);
+        _bump();
+        return await db.getWatchPosition(historyId);
+      }
+      await db.applyRemoteWatch(_watchFromMap(data, historyId));
+      _bump();
+    } catch (e, st) {
+      Log.e('CloudSync', e, st);
+    }
+    return DatabaseService().getWatchPosition(historyId);
+  }
+
+  Future<void> pullFavoriteItem(String contentId) async {
+    if (!isActive || contentId.isEmpty) return;
+    try {
+      final doc = await _favorites.doc(contentId).get().timeout(_cloudTimeout);
+      if (!doc.exists) return;
+      final data = doc.data() ?? {};
+      final db = DatabaseService();
+      if (data['deleted'] == true) {
+        await db.applyRemoteFavoriteDelete(contentId);
+      } else {
+        await db.applyRemoteFavorite(_favoriteFromMap(data, contentId));
+      }
+      _bump();
+    } catch (e, st) {
+      Log.e('CloudSync', e, st);
+    }
+  }
+
+  Future<void> pullAndMerge({bool force = false}) async {
+    if (!isActive) return;
+    if (_inFlightPull != null) {
+      await _inFlightPull;
+      if (!force) return;
+    }
+    if (!force &&
+        _lastFullPullAt != null &&
+        DateTime.now().difference(_lastFullPullAt!) < _fullPullFreshness) {
+      return;
+    }
+
+    final future = _doPullAndMerge();
+    _inFlightPull = future;
+    try {
+      await future;
+    } finally {
+      if (identical(_inFlightPull, future)) {
+        _inFlightPull = null;
+      }
+    }
+  }
+
+  Future<void> _doPullAndMerge() async {
+    try {
+      final favSnap = await _favorites.get().timeout(_cloudTimeout);
+      await _applyFavoriteDocs(favSnap.docs, backfillLocal: true);
+
+      final histSnap = await _history.get().timeout(_cloudTimeout);
+      await _applyWatchDocs(histSnap.docs, backfillLocal: true);
+
+      _lastFullPullAt = DateTime.now();
+      _bump();
+    } catch (e, st) {
+      Log.e('CloudSync', e, st);
+    }
+  }
+
+  void _listen() {
+    _favSub?.cancel();
+    _histSub?.cancel();
+    if (!isActive) return;
+
+    _favSub = _favorites.snapshots().listen(
+      (snap) async {
+        await _applyFavoriteDocs(snap.docs, backfillLocal: false);
+        _bump();
+      },
+      onError: (Object e, StackTrace st) => Log.e('CloudSync', e, st),
+    );
+    _histSub = _history.snapshots().listen(
+      (snap) async {
+        await _applyWatchDocs(snap.docs, backfillLocal: false);
+        _bump();
+      },
+      onError: (Object e, StackTrace st) => Log.e('CloudSync', e, st),
+    );
+  }
+
+  Future<void> _applyFavoriteDocs(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs, {
+    required bool backfillLocal,
+  }) async {
+    final db = DatabaseService();
+    final remoteIds = <String>{};
+    for (final doc in docs) {
+      final data = doc.data();
+      final id = (data['id'] as String?) ?? doc.id;
+      remoteIds.add(id);
+      if (data['deleted'] == true) {
+        await db.applyRemoteFavoriteDelete(id);
+      } else {
+        await db.applyRemoteFavorite(_favoriteFromMap(data, id));
+      }
+    }
+
+    if (backfillLocal) {
+      final localFavs = await db.getFavorites();
+      for (final fav in localFavs) {
+        if (!remoteIds.contains(fav.id)) {
+          await pushFavorite(fav);
+        }
+      }
+    }
+  }
+
+  Future<void> _applyWatchDocs(
+    List<QueryDocumentSnapshot<Map<String, dynamic>>> docs, {
+    required bool backfillLocal,
+  }) async {
+    final db = DatabaseService();
+    final remoteIds = <String>{};
+    for (final doc in docs) {
+      final data = doc.data();
+      final id = (data['historyId'] as String?) ?? doc.id;
+      remoteIds.add(id);
+      if (data['deleted'] == true) {
+        await db.applyRemoteWatchDelete(id);
+      } else {
+        await db.applyRemoteWatch(_watchFromMap(data, id));
+      }
+    }
+
+    if (backfillLocal) {
+      final localHist = await db.getWatchHistory();
+      for (final item in localHist) {
+        if (!remoteIds.contains(item.historyId)) {
+          _pendingWatch[item.historyId] = item;
+        }
+      }
+    }
+  }
+
+  void _bump() {
+    _notifyTimer?.cancel();
+    _notifyTimer = Timer(const Duration(milliseconds: 250), () {
+      revision.value++;
+    });
+  }
+
+  void _ensureLifecycleObserver() {
+    if (_observingLifecycle) return;
+    WidgetsBinding.instance.addObserver(this);
+    _observingLifecycle = true;
   }
 
   CollectionReference<Map<String, dynamic>> get _favorites =>
@@ -294,7 +469,7 @@ class CloudSyncService {
 
   static String _email(String host, String port, String username) {
     final id = _profileId(host, port, username);
-    return 'u$id@sync.iptv.app';
+    return 'u$id@sync.player.app';
   }
 
   static String _password(String host, String port, String username) {

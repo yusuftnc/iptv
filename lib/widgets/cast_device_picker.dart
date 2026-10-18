@@ -7,7 +7,7 @@ import 'package:flutter_chrome_cast/entities.dart';
 import '../models/cast_pick_result.dart';
 import '../services/cast_service.dart';
 
-/// Aynı Wi-Fi üzerindeki Cast / AirPlay hedeflerini listeler.
+/// Aynı Wi-Fi üzerindeki Cast hedeflerini listeler.
 Future<CastPickResult?> showCastDevicePicker(BuildContext context) async {
   final cast = CastService.instance;
   final isIOS = !kIsWeb && Platform.isIOS;
@@ -15,7 +15,7 @@ Future<CastPickResult?> showCastDevicePicker(BuildContext context) async {
   if (!cast.isSupported && !isIOS) {
     ScaffoldMessenger.of(context).showSnackBar(
       const SnackBar(
-        content: Text('Yansıtma yalnızca Android ve iOS\'ta desteklenir'),
+        content: Text('Yansıtma yalnızca Android ve iOS’ta desteklenir'),
       ),
     );
     return null;
@@ -42,10 +42,21 @@ Future<CastPickResult?> showCastDevicePicker(BuildContext context) async {
         child: ConstrainedBox(
           constraints: BoxConstraints(maxHeight: maxHeight),
           child: Padding(
-            padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 16),
             child: Column(
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                Center(
+                  child: Container(
+                    width: 36,
+                    height: 4,
+                    margin: const EdgeInsets.only(bottom: 12),
+                    decoration: BoxDecoration(
+                      color: Colors.white24,
+                      borderRadius: BorderRadius.circular(2),
+                    ),
+                  ),
+                ),
                 Row(
                   children: [
                     const Icon(Icons.cast, color: Colors.white),
@@ -73,16 +84,17 @@ Future<CastPickResult?> showCastDevicePicker(BuildContext context) async {
                             Navigator.pop(context);
                           }
                         },
-                        child: const Text('Bağlantıyı Kes'),
+                        child: const Text('Bağlantıyı kes'),
                       ),
                   ],
                 ),
-                const SizedBox(height: 8),
-                const Text(
-                  'Cast’li TV ve M7. Seçilince yayının görüntüsü gider. '
-                  'Kontrol Merkezi’ndeki Ekran Yansıt ayrıdır; '
-                  'uygulama o listeyi açamaz, o düğme yalnızca ses taşır.',
-                  style: TextStyle(color: Colors.white70, fontSize: 13),
+                const SizedBox(height: 4),
+                Text(
+                  isIOS
+                      ? 'Aynı ağdaki Chromecast ve Cast destekli televizyonlar. '
+                          'Apple TV için Kontrol Merkezi’nden Ekran Yansıt’ı kullanın.'
+                      : 'Aynı ağdaki Chromecast ve Cast destekli televizyonlar.',
+                  style: const TextStyle(color: Colors.white70, fontSize: 13),
                 ),
                 const SizedBox(height: 12),
                 Expanded(
@@ -106,7 +118,7 @@ Widget _buildDeviceList(CastService cast) {
   if (!cast.isSupported) {
     return const Center(
       child: Text(
-        'Bu cihazda Google Cast yok.',
+        'Bu telefonda Google Cast desteklenmiyor.',
         textAlign: TextAlign.center,
         style: TextStyle(color: Colors.white70),
       ),
@@ -126,12 +138,20 @@ Widget _buildDeviceList(CastService cast) {
               CircularProgressIndicator(),
               SizedBox(height: 16),
               Text(
-                'Cast cihazları aranıyor...\n'
-                '• Telefon ve TV aynı Wi-Fi\'de olsun\n'
-                '• iPhone: Ayarlar > Gizlilik > Yerel Ağ > uygulama açık\n'
-                '• TV\'de Chromecast built-in / Cast açık olsun',
+                'Cihazlar aranıyor…',
                 textAlign: TextAlign.center,
-                style: TextStyle(color: Colors.white70),
+                style: TextStyle(
+                  color: Colors.white,
+                  fontSize: 16,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              SizedBox(height: 8),
+              Text(
+                'Telefon ve televizyonun aynı Wi-Fi ağında\n'
+                'olduğundan emin olun.',
+                textAlign: TextAlign.center,
+                style: TextStyle(color: Colors.white70, fontSize: 13),
               ),
             ],
           ),
@@ -141,20 +161,23 @@ Widget _buildDeviceList(CastService cast) {
       return ListView.separated(
         itemCount: devices.length,
         separatorBuilder: (context, index) {
-          return const Divider(color: Colors.white12);
+          return const Divider(color: Colors.white12, height: 1);
         },
         itemBuilder: (context, index) {
           final device = devices[index];
-          final model = device.modelName ?? 'Cast cihazı';
           return ListTile(
-            leading: const Icon(Icons.tv, color: Colors.white),
+            leading: Icon(_deviceIcon(device), color: Colors.white),
             title: Text(
               device.friendlyName,
               style: const TextStyle(color: Colors.white),
             ),
             subtitle: Text(
-              model,
+              _deviceKind(device),
               style: const TextStyle(color: Colors.white54),
+            ),
+            trailing: const Icon(
+              Icons.chevron_right,
+              color: Colors.white38,
             ),
             onTap: () {
               Navigator.pop(context, CastPickGoogleCast(device));
@@ -164,4 +187,51 @@ Widget _buildDeviceList(CastService cast) {
       );
     },
   );
+}
+
+/// Ham model kodlarını (M7, X96, H96…) kullanıcıya gösterme.
+String _deviceKind(GoogleCastDevice device) {
+  final model = (device.modelName ?? '').trim();
+  final haystack = '${device.friendlyName} $model'.toLowerCase();
+
+  if (haystack.contains('nest hub') || haystack.contains('nest display')) {
+    return 'Google Nest';
+  }
+  if (haystack.contains('nest mini') ||
+      haystack.contains('google home') ||
+      haystack.contains('speaker')) {
+    return 'Hoparlör';
+  }
+  if (haystack.contains('chromecast')) {
+    return haystack.contains('google tv') ? 'Google TV' : 'Chromecast';
+  }
+  if (haystack.contains('google tv') || haystack.contains('android tv')) {
+    return 'Google TV';
+  }
+  if (haystack.contains('apple tv') || haystack.contains('airplay')) {
+    return 'Apple TV';
+  }
+  if (haystack.contains('smart tv') ||
+      haystack.contains('television') ||
+      haystack.contains('tv')) {
+    return 'Televizyon';
+  }
+
+  if (model.isEmpty || _looksLikeHardwareCode(model)) {
+    return 'Televizyon';
+  }
+  return model;
+}
+
+bool _looksLikeHardwareCode(String model) {
+  final compact = model.replaceAll(RegExp(r'[\s\-_]'), '');
+  if (compact.length <= 4) return true;
+  return RegExp(r'^[A-Za-z]{0,3}\d{1,4}[A-Za-z0-9]*$').hasMatch(compact);
+}
+
+IconData _deviceIcon(GoogleCastDevice device) {
+  final kind = _deviceKind(device);
+  if (kind == 'Hoparlör') return Icons.speaker;
+  if (kind == 'Google Nest') return Icons.smart_display;
+  return Icons.tv;
 }

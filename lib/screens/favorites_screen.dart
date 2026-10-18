@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/content_item.dart';
 import '../models/favorite_item.dart';
+import '../services/cloud_sync_service.dart';
 import '../services/database_service.dart';
 import 'player_screen.dart';
 import 'series_detail_screen.dart';
@@ -14,7 +15,8 @@ class FavoritesScreen extends StatefulWidget {
   State<FavoritesScreen> createState() => _FavoritesScreenState();
 }
 
-class _FavoritesScreenState extends State<FavoritesScreen> {
+class _FavoritesScreenState extends State<FavoritesScreen>
+    with WidgetsBindingObserver {
   final DatabaseService _databaseService = DatabaseService();
   List<FavoriteItem> _favorites = [];
   bool _isLoading = true;
@@ -22,29 +24,55 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
   @override
   void initState() {
     super.initState();
-    _loadFavorites();
+    WidgetsBinding.instance.addObserver(this);
+    CloudSyncService.instance.revision.addListener(_onCloudRevision);
+    _loadFavorites(fromCloud: true);
   }
 
-  Future<void> _loadFavorites() async {
-    setState(() {
-      _isLoading = true;
-    });
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    CloudSyncService.instance.revision.removeListener(_onCloudRevision);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadFavorites(fromCloud: true, showSpinner: false);
+    }
+  }
+
+  void _onCloudRevision() {
+    _loadFavorites(fromCloud: false, showSpinner: false);
+  }
+
+  Future<void> _loadFavorites({
+    bool fromCloud = false,
+    bool showSpinner = true,
+  }) async {
+    if (showSpinner && mounted) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
 
     try {
-      final favorites = await _databaseService.getFavorites();
+      final favorites =
+          await _databaseService.getFavorites(refreshFromCloud: fromCloud);
+      if (!mounted) return;
       setState(() {
         _favorites = favorites;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
       });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('Favoriler yüklenirken hata: $e')),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Favoriler yüklenirken hata: $e')),
+      );
     }
   }
 
@@ -221,15 +249,27 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _favorites.isEmpty
-              ? const Center(
-                  child: Text(
-                    'Favorileriniz boş',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
-                  ),
-                )
-              : SingleChildScrollView(
-                  child: Column(
+          : RefreshIndicator(
+              color: Colors.blue,
+              onRefresh: () =>
+                  _loadFavorites(fromCloud: true, showSpinner: false),
+              child: _favorites.isEmpty
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: const [
+                        SizedBox(height: 160),
+                        Center(
+                          child: Text(
+                            'Favorileriniz boş',
+                            style:
+                                TextStyle(color: Colors.white, fontSize: 16),
+                          ),
+                        ),
+                      ],
+                    )
+                  : SingleChildScrollView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // TV Kanalları
@@ -276,6 +316,7 @@ class _FavoritesScreenState extends State<FavoritesScreen> {
                     ],
                   ),
                 ),
+            ),
     );
   }
 }

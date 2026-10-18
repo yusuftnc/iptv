@@ -55,7 +55,10 @@ class DatabaseService {
   }
 
   // Favoriler
-  Future<List<FavoriteItem>> getFavorites() async {
+  Future<List<FavoriteItem>> getFavorites({bool refreshFromCloud = false}) async {
+    if (refreshFromCloud) {
+      await CloudSyncService.instance.pullFavorites();
+    }
     final box = await Hive.openBox<FavoriteItem>(_favoritesBox);
     return box.values.toList();
   }
@@ -92,13 +95,22 @@ class DatabaseService {
     }
   }
 
-  Future<bool> isFavorite(String contentId) async {
+  Future<bool> isFavorite(
+    String contentId, {
+    bool refreshFromCloud = false,
+  }) async {
+    if (refreshFromCloud) {
+      await CloudSyncService.instance.pullFavoriteItem(contentId);
+    }
     final box = await Hive.openBox<FavoriteItem>(_favoritesBox);
     return box.containsKey(contentId);
   }
 
   // İzleme Geçmişi
-  Future<List<WatchHistory>> getWatchHistory() async {
+  Future<List<WatchHistory>> getWatchHistory({bool refreshFromCloud = false}) async {
+    if (refreshFromCloud) {
+      await CloudSyncService.instance.pullWatchHistory();
+    }
     final box = await Hive.openBox<WatchHistory>(_watchHistoryBox);
     await _repairSeriesWatchNames(box);
     final List<WatchHistory> history = box.values.toList();
@@ -221,8 +233,14 @@ class DatabaseService {
     }
   }
 
-  Future<List<WatchHistory>> getLastWatched(String contentType,
-      {int limit = 10}) async {
+  Future<List<WatchHistory>> getLastWatched(
+    String contentType, {
+    int limit = 10,
+    bool refreshFromCloud = false,
+  }) async {
+    if (refreshFromCloud) {
+      await CloudSyncService.instance.pullWatchHistory();
+    }
     final box = await Hive.openBox<WatchHistory>(_watchHistoryBox);
     await _repairSeriesWatchNames(box);
     final filtered =
@@ -231,7 +249,13 @@ class DatabaseService {
     return filtered.take(limit).toList();
   }
 
-  Future<WatchHistory?> getWatchPosition(String contentId) async {
+  Future<WatchHistory?> getWatchPosition(
+    String contentId, {
+    bool refreshFromCloud = false,
+  }) async {
+    if (refreshFromCloud) {
+      return CloudSyncService.instance.pullWatchItem(contentId);
+    }
     final box = await Hive.openBox<WatchHistory>(_watchHistoryBox);
     final result = box.get(contentId);
     Log.d("DBG",

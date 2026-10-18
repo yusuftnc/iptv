@@ -22,20 +22,20 @@ class Log {
 
   static void d(String tag, String msg) {
     if (level.index >= LogLevel.debug.index && kDebugMode) {
-      Log.d("DBG", 'D/$tag • $msg');
+      debugPrint('D/$tag • $msg');
     }
   }
 
   static void i(String tag, String msg) {
     if (level.index >= LogLevel.info.index && kDebugMode) {
-      Log.d("DBG", 'I/$tag • $msg');
+      debugPrint('I/$tag • $msg');
     }
   }
 
   static void e(String tag, Object err, [StackTrace? st]) {
     if (level.index >= LogLevel.error.index && kDebugMode) {
-      Log.d("DBG", 'E/$tag • $err');
-      if (st != null) Log.d("DBG", st.toString());
+      debugPrint('E/$tag • $err');
+      if (st != null) debugPrint(st.toString());
     }
   }
 }

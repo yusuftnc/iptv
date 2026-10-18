@@ -1,13 +1,13 @@
 {
   "project_info": {
-    "project_number": "615073740306",
-    "project_id": "iptvapp-1b319",
-    "storage_bucket": "iptvapp-1b319.firebasestorage.app"
+    "project_number": "652529542347",
+    "project_id": "player-b2e72",
+    "storage_bucket": "player-b2e72.firebasestorage.app"
   },
   "client": [
     {
       "client_info": {
-        "mobilesdk_app_id": "1:615073740306:android:d8966f41e03cc563ed8acb",
+        "mobilesdk_app_id": "1:652529542347:android:8ae7bbc1c02b785ef7274e",
         "android_client_info": {
           "package_name": "com.yusuf.player"
         }
@@ -15,7 +15,7 @@
       "oauth_client": [],
       "api_key": [
         {
-          "current_key": "AIzaSyDVb9usHmWSZReUG5nLTkUxwMymJwrN2uc"
+          "current_key": "AIzaSyAa1_OQXrpQX8xma0yJrkFZeDW-Jjewh6I"
         }
       ],
       "services": {

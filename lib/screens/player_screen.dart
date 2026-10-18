@@ -16,6 +16,7 @@ import '../widgets/cast_device_picker.dart';
 import 'dart:async';
 import 'dart:io' show Platform;
 import 'dart:math' show max;
+import 'dart:ui' show FontFeature;
 import 'package:flutter/foundation.dart' show kIsWeb;
 
 class PlayerScreen extends StatefulWidget {
@@ -74,13 +75,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   // Tam ekran değişkenini ekle
   bool _isFullScreen = false;
+  bool? _immersiveLandscape;
 
-  // Pozisyon ayarlama denemelerini başlat
+  // Pozisyon ayarlama (resume) durumu
   bool _seekAttemptsStarted = false;
   int? _initialSeekPosition;
   bool _shouldSeekToInitialPosition = false;
   int _seekAttemptCount = 0;
   final int _maxSeekAttempts = 5;
+
+  /// Resume seek bir kez yapıldı mı? Thrash'i önler (VLC hazır olunca tek seek).
+  bool _initialSeekDone = false;
+  Timer? _initialSeekFallbackTimer;
 
   // İzleme geçmişi anahtarı
   late final String _historyId;
@@ -129,6 +135,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     // Gelecekteki denemeleri engelle
     _seekAttemptCount = _maxSeekAttempts;
     _seekAttemptsStarted = true;
+    _initialSeekDone = true;
+    _initialSeekFallbackTimer?.cancel();
   }
 
   // Last saved position
@@ -157,13 +165,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _applyPlayerOrientations();
     // pushReplacement sırasında eski dispose bazen sonra çalışır; yönü pekiştir
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (mounted) _applyPlayerOrientations();
+      if (!mounted) return;
+      _applyPlayerOrientations();
+      _syncPlayerSystemUi(MediaQuery.orientationOf(context));
     });
-    // Status bar (saat/pil) görünsün
-    SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.manual,
-      overlays: SystemUiOverlay.values,
-    );
 
     _loadAutoPlaySetting();
     _loadTrackPreferences();
@@ -310,6 +315,37 @@ class _PlayerScreenState extends State<PlayerScreen> {
     ]);
   }
 
+  static const _playerOverlayStyle = SystemUiOverlayStyle(
+    statusBarColor: Colors.transparent,
+    statusBarBrightness: Brightness.dark,
+    statusBarIconBrightness: Brightness.light,
+    systemNavigationBarColor: Colors.transparent,
+    systemNavigationBarDividerColor: Colors.transparent,
+    systemNavigationBarIconBrightness: Brightness.light,
+    systemNavigationBarContrastEnforced: false,
+  );
+
+  /// Dikey: sistem çubuklarının arkasına çiz (Android tuş / iOS çizgi).
+  /// Yatay: tam immersive, sistem butonları gizlenir.
+  void _syncPlayerSystemUi(Orientation orientation) {
+    final landscape = orientation == Orientation.landscape;
+    if (_immersiveLandscape == landscape) return;
+    _immersiveLandscape = landscape;
+    if (landscape) {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    } else {
+      SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+      SystemChrome.setSystemUIOverlayStyle(_playerOverlayStyle);
+    }
+  }
+
+  void _restorePlayerSystemUi() {
+    SystemChrome.setEnabledSystemUIMode(
+      SystemUiMode.manual,
+      overlays: SystemUiOverlay.values,
+    );
+  }
+
   Future<void> _loadTrackPreferences() async {
     final audio = await _storageService.getPreferredAudioTrack();
     final sub = await _storageService.getPreferredSubtitleTrack();
@@ -396,7 +432,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   }
 
   Future<void> _checkIfFavorite() async {
-    final isFavorite = await _databaseService.isFavorite(widget.contentId);
+    final isFavorite = await _databaseService.isFavorite(
+      widget.contentId,
+      refreshFromCloud: true,
+    );
     if (mounted) {
       setState(() {
         _isFavorite = isFavorite;
@@ -491,7 +530,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
       Log.d("DBG",
           "Debug - İzleme pozisyonu kontrol ediliyor: ${widget.contentId}");
-      final watchHistory = await _databaseService.getWatchPosition(_historyId);
+      final watchHistory = await _databaseService.getWatchPosition(
+        _historyId,
+        refreshFromCloud: true,
+      );
       Log.d("DBG",
           "Debug - Alınan izleme geçmişi: ${watchHistory?.position} / ${watchHistory?.duration}");
       Log.d("DBG",
@@ -767,8 +809,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
         if (_shouldSeekToInitialPosition && _initialSeekPosition != null) {
           Log.d("DBG",
-              "Debug - Controller hazır, pozisyon ayarlamayı deneyeceğiz");
-          _startSeekAttempts(_initialSeekPosition!);
+              "Debug - Resume gerekli; oynatma başlatılıyor, gerçekten oynayınca seek yapılacak");
+          // Oynatmayı başlat ki 'gerçekten oynuyor' sinyali gelsin; seek tam o
+          // anda tek sefer yapılır. Hazır olmadan seek etmek thrash'e yol açıyordu.
+          try {
+            await _controller!.play();
+          } catch (_) {}
+          _scheduleInitialSeekFallback(_initialSeekPosition!);
         }
       });
 
@@ -781,12 +828,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
             v.isPlaying &&
             v.position.inSeconds > 0 &&
             _shouldSeekToInitialPosition &&
-            _initialSeekPosition != null) {
-          if (!_seekAttemptsStarted) {
-            Log.d("DBG",
-                "Debug - Video oynamaya başladı, pozisyon ayarlamayı deneyeceğiz");
-            _startSeekAttempts(_initialSeekPosition!);
-          }
+            _initialSeekPosition != null &&
+            !_initialSeekDone) {
+          Log.d("DBG",
+              "Debug - Video gerçekten oynamaya başladı, resume pozisyonuna gidiliyor");
+          unawaited(_performInitialSeek(_initialSeekPosition!));
         }
 
         // Track sayısı değişince / oynatma başlayınca tercihleri yeniden uygula
@@ -1213,10 +1259,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (mounted) {
         ScaffoldMessenger.of(context).showSnackBar(
           SnackBar(
-            content: Text(
-              '${device.friendlyName} bağlanıyor… '
-              'Bekleme ekranındaysa uyandırılıyor.',
-            ),
+            content: Text('${device.friendlyName} bağlanıyor…'),
           ),
         );
       }
@@ -1228,6 +1271,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         contentType: widget.contentType,
         imageUrl: widget.streamIcon,
         position: _currentPosition,
+        preferredAudioLabel: _preferredAudioLabel,
       );
 
       try {
@@ -1395,96 +1439,59 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _startHideControlsTimer();
   }
 
-  // Pozisyon ayarlama denemelerini başlat
-  void _startSeekAttempts(int position) async {
-    if (_seekAttemptsStarted) {
-      return; // Zaten başlatılmış
-    }
-
-    _seekAttemptsStarted = true;
-    _seekAttemptCount = 0;
-
-    // İlk deneme, controller başlatıldıktan hemen sonra
-    _performSeekAttempt(position);
-
-    // Sonraki denemeleri zamanla gerçekleştir
-    // 1, 2, 4, 8 saniye aralıklarla dene
-    for (int i = 1; i <= 4; i++) {
-      Future.delayed(Duration(seconds: i * i), () {
-        if (_controller != null &&
-            mounted &&
-            _seekAttemptCount < _maxSeekAttempts) {
-          _performSeekAttempt(position);
-        }
-      });
-    }
+  /// VLC gerçekten oynamaya başlayana kadar seek yapmayı beklemediğimiz için
+  /// bazı yayınlar hiç 'oynuyor' sinyali üretmeyebilir; bu durumda bir süre
+  /// sonra zorla tek seek dener.
+  void _scheduleInitialSeekFallback(int position) {
+    _initialSeekFallbackTimer?.cancel();
+    _initialSeekFallbackTimer = Timer(const Duration(seconds: 6), () {
+      if (!mounted || _initialSeekDone || _controller == null) return;
+      final v = _controller!.value;
+      if (!v.isInitialized) return;
+      Log.d("DBG",
+          "Debug - Resume fallback: oynuyor sinyali gelmedi, yine de seek deneniyor");
+      unawaited(_performInitialSeek(position));
+    });
   }
 
-  void _performSeekAttempt(int position) async {
-    _seekAttemptCount++;
+  /// Resume pozisyonuna TEK sefer, oynatıcı hazırken temiz bir seek yapar.
+  /// Eski thrash'li (pause/seek/play döngüsü) yaklaşımın yerine geçer.
+  Future<void> _performInitialSeek(int position) async {
+    if (_initialSeekDone) return;
+    _initialSeekDone = true;
+    _seekAttemptsStarted = true;
+    _initialSeekFallbackTimer?.cancel();
+
+    final controller = _controller;
+    if (controller == null || !mounted) return;
 
     try {
-      if (_controller == null || !mounted) {
-        Log.d("DBG",
-            "Debug - Deneme $_seekAttemptCount: Controller yok veya widget artık mounted değil");
-        return;
-      }
+      final currentPos = controller.value.position.inSeconds;
+      if (currentPos < position - 5) {
+        Log.d("DBG", "Debug - Resume: $position sn'ye gidiliyor (şu an $currentPos)");
+        await controller.seekTo(Duration(seconds: position));
 
-      // Eğer oynatma henüz başlamamışsa başlat
-      if (!_controller!.value.isPlaying && !_controller!.value.isBuffering) {
-        Log.d("DBG",
-            "Debug - Deneme $_seekAttemptCount: Video oynamıyor, oynatmayı başlatıyorum");
-        await _controller!.play();
-
-        // Oynatmayı başlattıktan sonra kısa bir süre bekle ve pozisyonu ayarla
-        await Future.delayed(const Duration(milliseconds: 500));
-      }
-
-      final currentPos = _controller!.value.position.inSeconds;
-
-      // Eğer zaten istenen pozisyonda veya daha ilerideyse, işlem yapmaya gerek yok
-      if (currentPos >= position - 5) {
-        Log.d("DBG",
-            "Debug - Deneme $_seekAttemptCount: Zaten doğru pozisyona yakın (Şu anki: $currentPos, Hedef: $position)");
-        // Seek sonrası VLC ses/altyazıyı sıfırlamış olabilir
-        _audioPrefApplied = false;
-        _subtitlePrefApplied = false;
-        await _syncPreferredTracks(force: true);
-        return;
-      }
-      Log.d("DBG",
-          "Debug - Deneme $_seekAttemptCount: Video $position saniyeye ilerletiliyor (Şu anki: $currentPos)");
-
-      // Önce videoyu duraklat
-      await _controller!.pause();
-
-      // Pozisyonu ayarla
-      await _controller!.seekTo(Duration(seconds: position));
-
-      // Kısa bir beklemeden sonra tekrar oynat
-      await Future.delayed(const Duration(milliseconds: 300));
-      await _controller!.play();
-
-      // Son pozisyonu kontrol et
-      await Future.delayed(const Duration(milliseconds: 700));
-      final newPos = _controller!.value.position.inSeconds;
-      Log.d("DBG",
-          "Debug - Deneme $_seekAttemptCount: Pozisyon ayarlama sonrası: $newPos");
-
-      // Seek audio/subtitle track'i varsayılana döndürebilir
-      _audioPrefApplied = false;
-      _subtitlePrefApplied = false;
-      await _syncPreferredTracks(force: true);
-      _startTrackPreferenceWatcher();
-
-      // Eğer pozisyon değişmediyse, farklı bir yöntem dene (agresif yöntem)
-      if (newPos < 3 || (newPos - currentPos).abs() < 3) {
-        Log.d("DBG",
-            "Debug - Deneme $_seekAttemptCount: Pozisyon değişmedi, farklı yöntem deneniyor");
+        // Bazı yayınlarda ilk seek düşebilir; oynuyorsa bir kez doğrula.
+        await Future.delayed(const Duration(milliseconds: 900));
+        if (mounted && _controller != null) {
+          final after = _controller!.value.position.inSeconds;
+          if (after < position - 15) {
+            Log.d("DBG", "Debug - Resume: seek tutmadı ($after), tek tekrar");
+            await _controller!.seekTo(Duration(seconds: position));
+          }
+        }
+      } else {
+        Log.d("DBG", "Debug - Resume: zaten hedefte (şu an $currentPos)");
       }
     } catch (e) {
-      Log.d("DBG", "Debug - Deneme $_seekAttemptCount sırasında hata: $e");
+      Log.d("DBG", "Debug - Resume seek hatası: $e");
     }
+
+    // Seek, VLC'nin ses/altyazı seçimini varsayılana döndürebilir.
+    _audioPrefApplied = false;
+    _subtitlePrefApplied = false;
+    await _syncPreferredTracks(force: true);
+    _startTrackPreferenceWatcher();
   }
 
   void _videoListener() {
@@ -1577,6 +1584,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _audioPrefApplied = true;
     await _storageService.savePreferredAudioTrack(label);
     Log.d('DBG', 'Audio preference saved: $label');
+    // Cast sırasında seçimi TV'deki yayına da uygula.
+    if (_isCasting && !_isAirPlaying) {
+      unawaited(CastService.instance.applyPreferredAudioByLabel(label));
+    }
     _startHideControlsTimer();
   }
 
@@ -1626,6 +1637,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _positionUpdateTimer?.cancel();
     _hideControlsTimer?.cancel();
     _trackPrefTimer?.cancel();
+    _initialSeekFallbackTimer?.cancel();
     _castSessionSub?.cancel();
     _castMediaSub?.cancel();
     _castPositionSub?.cancel();
@@ -1637,10 +1649,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _controller?.dispose();
 
     _restoreExitOrientations();
-    SystemChrome.setEnabledSystemUIMode(
-      SystemUiMode.manual,
-      overlays: SystemUiOverlay.values,
-    );
+    _restorePlayerSystemUi();
     super.dispose();
   }
 
@@ -1658,14 +1667,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
 
         _restoreExitOrientations();
-        SystemChrome.setEnabledSystemUIMode(
-          SystemUiMode.manual,
-          overlays: SystemUiOverlay.values,
-        );
+        _restorePlayerSystemUi();
       },
-      child: Scaffold(
-        backgroundColor: Colors.black,
-        body: _buildBody(),
+      child: AnnotatedRegion<SystemUiOverlayStyle>(
+        value: _playerOverlayStyle,
+        child: Scaffold(
+          backgroundColor: Colors.black,
+          body: Builder(
+            builder: (context) {
+              _syncPlayerSystemUi(MediaQuery.orientationOf(context));
+              return _buildBody();
+            },
+          ),
+        ),
       ),
     );
   }
@@ -1797,23 +1811,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
         if (_showNextEpisodeCta && _hasNextEpisode && !_isAirPlaying)
           Positioned(
-            right: 16,
-            bottom: 96,
-            child: SafeArea(
-              child: ElevatedButton.icon(
-                onPressed: () => _playAdjacentEpisode(1),
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
-                  padding:
-                      const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(8),
-                  ),
+            right: 16 + MediaQuery.viewPaddingOf(context).right,
+            bottom: 88 + MediaQuery.viewPaddingOf(context).bottom,
+            child: ElevatedButton.icon(
+              onPressed: () => _playAdjacentEpisode(1),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: Colors.green,
+                foregroundColor: Colors.white,
+                padding:
+                    const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(8),
                 ),
-                icon: const Icon(Icons.skip_next),
-                label: const Text('Sonraki Bölüm'),
               ),
+              icon: const Icon(Icons.skip_next),
+              label: const Text('Sonraki Bölüm'),
             ),
           ),
       ],
@@ -1831,12 +1843,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       );
     }
 
-    // Ekran yönlendirmesini al
-    final orientation = MediaQuery.of(context).orientation;
+    final orientation = MediaQuery.orientationOf(context);
+    final viewPadding = MediaQuery.viewPaddingOf(context);
 
-    // Sabit değerler
-    const double controlPaddingHorizontal = 16;
-    const double controlPaddingVertical = 8;
     const double iconSize = 48;
     const double playIconSize = 64;
     const double spacing = 32;
@@ -1849,18 +1858,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.spaceBetween,
           children: [
-            // Üst kontrol çubuğu - oryantasyona göre farklı görünümler
-            SafeArea(
-              bottom: false,
-              child: Container(
-                padding: const EdgeInsets.symmetric(
-                    horizontal: controlPaddingHorizontal,
-                    vertical: controlPaddingVertical),
-                color: Colors.black54,
-                child: orientation == Orientation.portrait
-                    ? _buildPortraitTopControls() // Dikey mod
-                    : _buildLandscapeTopControls(), // Yatay mod
+            Container(
+              width: double.infinity,
+              color: Colors.black54,
+              padding: EdgeInsets.fromLTRB(
+                8 + viewPadding.left,
+                viewPadding.top + 4,
+                8 + viewPadding.right,
+                4,
               ),
+              child: orientation == Orientation.portrait
+                  ? _buildPortraitTopControls()
+                  : _buildLandscapeTopControls(),
             ),
 
             // Orta alan - İleri/geri sarma + önceki/sonraki bölüm
@@ -1923,63 +1932,87 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
             ),
 
-            // Alt kontrol çubuğu - İlerleme çubuğu ve ses kontrolü
-            Container(
-              padding: const EdgeInsets.symmetric(
-                  horizontal: controlPaddingHorizontal,
-                  vertical: controlPaddingVertical),
-              color: Colors.black54,
-              child: Column(
-                children: [
-                  // İlerleme çubuğu
-                  Row(
-                    children: [
-                      Text(
-                        _formatDuration(_currentPosition),
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                      Expanded(
-                        child: Slider(
-                          value: _currentPosition.inSeconds.toDouble() >= 0 &&
-                                  _totalDuration.inSeconds > 0 &&
-                                  _currentPosition.inSeconds <=
-                                      _totalDuration.inSeconds
-                              ? _currentPosition.inSeconds.toDouble()
-                              : 0.0,
-                          min: 0,
-                          max: _totalDuration.inSeconds.toDouble() > 0
-                              ? _totalDuration.inSeconds.toDouble()
-                              : 1,
-                          onChanged: (value) {
-                            final target = Duration(seconds: value.toInt());
-                            setState(() => _currentPosition = target);
-                            if (_isCasting && !_isAirPlaying) {
-                              CastService.instance.seekTo(target);
-                            } else {
-                              _controller?.seekTo(target);
-                            }
-                            _startHideControlsTimer();
-                          },
-                          onChangeStart: (value) {
-                            setState(() {
-                              _isDraggingProgress = true;
-                            });
-                          },
-                          onChangeEnd: (value) {
-                            setState(() {
-                              _isDraggingProgress = false;
-                            });
-                            _startHideControlsTimer();
-                          },
-                        ),
-                      ),
-                      Text(
-                        _formatDuration(_totalDuration),
-                        style: const TextStyle(color: Colors.white),
-                      ),
-                    ],
-                  ),
-                ],
+            _buildBottomScrubber(viewPadding),
+          ],
+        ),
+      ),
+    );
+  }
+
+  /// İlerleme çubuğu sistem alanının üstünde; koyu zemin Android tuşlarının
+  /// ve iOS home çizgisinin arkasına uzanır, ayrı bir şerit gibi durmaz.
+  Widget _buildBottomScrubber(EdgeInsets viewPadding) {
+    final bottomGap = viewPadding.bottom > 0 ? viewPadding.bottom : 12.0;
+    return Container(
+      width: double.infinity,
+      color: Colors.black87,
+      padding: EdgeInsets.fromLTRB(
+        12 + viewPadding.left,
+        4,
+        12 + viewPadding.right,
+        bottomGap,
+      ),
+      child: SliderTheme(
+        data: SliderTheme.of(context).copyWith(
+          trackHeight: 3,
+          thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 6),
+          overlayShape: const RoundSliderOverlayShape(overlayRadius: 12),
+          activeTrackColor: Colors.white,
+          inactiveTrackColor: Colors.white24,
+          thumbColor: Colors.white,
+          overlayColor: Colors.white24,
+        ),
+        child: Row(
+          children: [
+            Text(
+              _formatDuration(_currentPosition),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontFeatures: [FontFeature.tabularFigures()],
+              ),
+            ),
+            Expanded(
+              child: Slider(
+                value: _currentPosition.inSeconds.toDouble() >= 0 &&
+                        _totalDuration.inSeconds > 0 &&
+                        _currentPosition.inSeconds <=
+                            _totalDuration.inSeconds
+                    ? _currentPosition.inSeconds.toDouble()
+                    : 0.0,
+                min: 0,
+                max: _totalDuration.inSeconds.toDouble() > 0
+                    ? _totalDuration.inSeconds.toDouble()
+                    : 1,
+                onChanged: (value) {
+                  final target = Duration(seconds: value.toInt());
+                  setState(() => _currentPosition = target);
+                  if (_isCasting && !_isAirPlaying) {
+                    CastService.instance.seekTo(target);
+                  } else {
+                    _controller?.seekTo(target);
+                  }
+                  _startHideControlsTimer();
+                },
+                onChangeStart: (value) {
+                  setState(() {
+                    _isDraggingProgress = true;
+                  });
+                },
+                onChangeEnd: (value) {
+                  setState(() {
+                    _isDraggingProgress = false;
+                  });
+                  _startHideControlsTimer();
+                },
+              ),
+            ),
+            Text(
+              _formatDuration(_totalDuration),
+              style: const TextStyle(
+                color: Colors.white,
+                fontSize: 12,
+                fontFeatures: [FontFeature.tabularFigures()],
               ),
             ),
           ],

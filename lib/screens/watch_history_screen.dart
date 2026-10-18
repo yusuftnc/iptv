@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/watch_history.dart';
 import '../models/content_item.dart';
+import '../services/cloud_sync_service.dart';
 import '../services/database_service.dart';
 import 'player_screen.dart';
 import 'series_detail_screen.dart';
@@ -13,7 +14,8 @@ class WatchHistoryScreen extends StatefulWidget {
   State<WatchHistoryScreen> createState() => _WatchHistoryScreenState();
 }
 
-class _WatchHistoryScreenState extends State<WatchHistoryScreen> {
+class _WatchHistoryScreenState extends State<WatchHistoryScreen>
+    with WidgetsBindingObserver {
   final DatabaseService _databaseService = DatabaseService();
   List<WatchHistory> _watchHistory = [];
   bool _isLoading = true;
@@ -21,29 +23,55 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen> {
   @override
   void initState() {
     super.initState();
-    _loadWatchHistory();
+    WidgetsBinding.instance.addObserver(this);
+    CloudSyncService.instance.revision.addListener(_onCloudRevision);
+    _loadWatchHistory(fromCloud: true);
   }
 
-  Future<void> _loadWatchHistory() async {
-    setState(() {
-      _isLoading = true;
-    });
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    CloudSyncService.instance.revision.removeListener(_onCloudRevision);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _loadWatchHistory(fromCloud: true, showSpinner: false);
+    }
+  }
+
+  void _onCloudRevision() {
+    _loadWatchHistory(fromCloud: false, showSpinner: false);
+  }
+
+  Future<void> _loadWatchHistory({
+    bool fromCloud = false,
+    bool showSpinner = true,
+  }) async {
+    if (showSpinner && mounted) {
+      setState(() {
+        _isLoading = true;
+      });
+    }
 
     try {
-      final history = await _databaseService.getWatchHistory();
+      final history =
+          await _databaseService.getWatchHistory(refreshFromCloud: fromCloud);
+      if (!mounted) return;
       setState(() {
         _watchHistory = history;
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _isLoading = false;
       });
-      if (mounted) {
-        ScaffoldMessenger.of(context).showSnackBar(
-          SnackBar(content: Text('İzleme geçmişi yüklenirken hata: $e')),
-        );
-      }
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('İzleme geçmişi yüklenirken hata: $e')),
+      );
     }
   }
 
@@ -100,7 +128,7 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen> {
         MaterialPageRoute(
           builder: (context) => SeriesDetailScreen(seriesItem: contentItem),
         ),
-      ).then((_) => _loadWatchHistory());
+      ).then((_) => _loadWatchHistory(fromCloud: true, showSpinner: false));
     } else {
       final IptvService iptv = IptvService();
       String url = '';
@@ -127,7 +155,7 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen> {
             streamIcon: item.streamIcon,
           ),
         ),
-      ).then((_) => _loadWatchHistory());
+      ).then((_) => _loadWatchHistory(fromCloud: true, showSpinner: false));
     }
   }
 
@@ -184,15 +212,27 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen> {
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
-          : _watchHistory.isEmpty
-              ? const Center(
-                  child: Text(
-                    'İzleme geçmişiniz boş',
-                    style: TextStyle(color: Colors.white, fontSize: 16),
-                  ),
-                )
-              : ListView.builder(
-                  itemCount: _watchHistory.length,
+          : RefreshIndicator(
+              color: Colors.blue,
+              onRefresh: () =>
+                  _loadWatchHistory(fromCloud: true, showSpinner: false),
+              child: _watchHistory.isEmpty
+                  ? ListView(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      children: const [
+                        SizedBox(height: 160),
+                        Center(
+                          child: Text(
+                            'İzleme geçmişiniz boş',
+                            style:
+                                TextStyle(color: Colors.white, fontSize: 16),
+                          ),
+                        ),
+                      ],
+                    )
+                  : ListView.builder(
+                      physics: const AlwaysScrollableScrollPhysics(),
+                      itemCount: _watchHistory.length,
                   itemBuilder: (context, index) {
                     final item = _watchHistory[index];
                     return Dismissible(
@@ -300,6 +340,7 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen> {
                     );
                   },
                 ),
+            ),
     );
   }
 }

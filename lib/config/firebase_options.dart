@@ -18,19 +18,19 @@ class DefaultFirebaseOptions {
   }
 
   static const FirebaseOptions android = FirebaseOptions(
-    apiKey: 'AIzaSyDVb9usHmWSZReUG5nLTkUxwMymJwrN2uc',
-    appId: '1:615073740306:android:d8966f41e03cc563ed8acb',
-    messagingSenderId: '615073740306',
-    projectId: 'iptvapp-1b319',
-    storageBucket: 'iptvapp-1b319.firebasestorage.app',
+    apiKey: 'AIzaSyAa1_OQXrpQX8xma0yJrkFZeDW-Jjewh6I',
+    appId: '1:652529542347:android:8ae7bbc1c02b785ef7274e',
+    messagingSenderId: '652529542347',
+    projectId: 'player-b2e72',
+    storageBucket: 'player-b2e72.firebasestorage.app',
   );
 
   static const FirebaseOptions ios = FirebaseOptions(
-    apiKey: 'AIzaSyAcGZnWWKDhEAyFIl98306WXEdTL49m2Hw',
-    appId: '1:615073740306:ios:84f8c65ea8184925ed8acb',
-    messagingSenderId: '615073740306',
-    projectId: 'iptvapp-1b319',
-    storageBucket: 'iptvapp-1b319.firebasestorage.app',
+    apiKey: 'AIzaSyA5QJq7eTIlvCIzuu__tSNOLVvBTcn_Fcc',
+    appId: '1:652529542347:ios:50974292d03bc6a7f7274e',
+    messagingSenderId: '652529542347',
+    projectId: 'player-b2e72',
+    storageBucket: 'player-b2e72.firebasestorage.app',
     iosBundleId: 'com.yusuf.player',
   );
 }

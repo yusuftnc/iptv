@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
@@ -23,7 +25,7 @@ class HomeScreen extends StatefulWidget {
   State<HomeScreen> createState() => _HomeScreenState();
 }
 
-class _HomeScreenState extends State<HomeScreen> {
+class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   final IptvService _iptvService = IptvService();
   int _currentIndex = 0;
   bool _isLoading = true;
@@ -49,7 +51,47 @@ class _HomeScreenState extends State<HomeScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    CloudSyncService.instance.revision.addListener(_onCloudRevision);
     _loadContent();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    CloudSyncService.instance.revision.removeListener(_onCloudRevision);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _reloadContinueWatching(fromCloud: true);
+    }
+  }
+
+  void _onCloudRevision() {
+    _reloadContinueWatching();
+  }
+
+  Future<void> _reloadContinueWatching({bool fromCloud = false}) async {
+    if (!mounted || _currentIndex != 0) return;
+    final db = DatabaseService();
+    final movies = await db.getLastWatched(
+      'movie',
+      limit: 10,
+      refreshFromCloud: fromCloud,
+    );
+    final series = await db.getLastWatched(
+      'series',
+      limit: 10,
+      refreshFromCloud: fromCloud,
+    );
+    if (!mounted) return;
+    setState(() {
+      _lastWatchedMovies = movies;
+      _lastWatchedSeries = series;
+    });
   }
 
   Future<void> _loadContent() async {
@@ -67,6 +109,7 @@ class _HomeScreenState extends State<HomeScreen> {
           final db = DatabaseService();
           _lastWatchedMovies = await db.getLastWatched('movie', limit: 10);
           _lastWatchedSeries = await db.getLastWatched('series', limit: 10);
+          unawaited(_reloadContinueWatching(fromCloud: true));
 
           break;
         case 1: // TV Kanalları
@@ -218,7 +261,7 @@ class _HomeScreenState extends State<HomeScreen> {
                     },
                     transitionDuration: const Duration(milliseconds: 100),
                   ),
-                );
+                ).then((_) => _reloadContinueWatching());
               },
               tooltip: 'Ara',
             ),
@@ -285,7 +328,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       MaterialPageRoute(
                         builder: (context) => const FavoritesScreen(),
                       ),
-                    );
+                    ).then((_) => _reloadContinueWatching());
                   },
                 ),
                 ListTile(
@@ -304,7 +347,7 @@ class _HomeScreenState extends State<HomeScreen> {
                       MaterialPageRoute(
                         builder: (context) => const WatchHistoryScreen(),
                       ),
-                    );
+                    ).then((_) => _reloadContinueWatching());
                   },
                 ),
                 // Yenile
@@ -582,7 +625,7 @@ class _HomeScreenState extends State<HomeScreen> {
                           seriesItem: ContentItem.fromJson(item, 'series'),
                         ),
                       ),
-                    );
+                    ).then((_) => _reloadContinueWatching());
                     return;
                   }
 
@@ -719,7 +762,7 @@ class _HomeScreenState extends State<HomeScreen> {
               movieDetails: movieDetails,
             ),
           ),
-        );
+        ).then((_) => _reloadContinueWatching());
       } else {
         if (!mounted) return;
         Navigator.push(
@@ -734,7 +777,7 @@ class _HomeScreenState extends State<HomeScreen> {
               historyId: historyId,
             ),
           ),
-        );
+        ).then((_) => _reloadContinueWatching());
       }
     } catch (e) {
       if (!mounted) return;
@@ -999,7 +1042,7 @@ class _HomeScreenState extends State<HomeScreen> {
           MaterialPageRoute(
             builder: (context) => SeriesDetailScreen(seriesItem: contentItem),
           ),
-        );
+        ).then((_) => _reloadContinueWatching());
         return;
       }
 
@@ -1024,7 +1067,7 @@ class _HomeScreenState extends State<HomeScreen> {
               movieDetails: movieDetails,
             ),
           ),
-        );
+        ).then((_) => _reloadContinueWatching());
       } else {
         if (!mounted) return;
         Navigator.push(
@@ -1039,7 +1082,7 @@ class _HomeScreenState extends State<HomeScreen> {
               historyId: contentItem.historyId,
             ),
           ),
-        );
+        ).then((_) => _reloadContinueWatching());
       }
     } catch (e) {
       if (!mounted) return;

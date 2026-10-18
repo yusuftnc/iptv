@@ -156,6 +156,7 @@ class CastService {
     String contentType = 'movie',
     String? imageUrl,
     Duration position = Duration.zero,
+    String? preferredAudioLabel,
   }) async {
     if (!_initialized) await initialize();
     if (!_initialized) {
@@ -182,6 +183,7 @@ class CastService {
           imageUrl: imageUrl,
           position: position,
           attempt: attempt,
+          preferredAudioLabel: preferredAudioLabel,
         );
         return;
       } catch (e) {
@@ -213,6 +215,7 @@ class CastService {
     required String? imageUrl,
     required Duration position,
     required int attempt,
+    String? preferredAudioLabel,
   }) async {
     final alreadyConnected = GoogleCastSessionManager.instance.connectionState ==
         GoogleCastConnectState.connected;
@@ -270,6 +273,142 @@ class CastService {
     );
 
     Log.d('Cast', 'Playing on ${device.friendlyName}');
+
+    await _applyPreferredAudio(preferredAudioLabel);
+  }
+
+  /// Telefonda seçili ses parçasının dilini (örn. "Turkish - AC3…") TV'deki
+  /// yayına uygular. Alıcı yalnızca parçaları ayrıştırabildiğinde çalışır
+  /// (HLS/DASH veya çok sesli, ayrıştırılabilen akışlar). Gömülü AC3/MKV
+  /// seslerinde alıcı parça bildirmezse sessizce atlanır.
+  Future<void> applyPreferredAudioByLabel(String label) =>
+      _applyPreferredAudio(label);
+
+  Future<void> _applyPreferredAudio(String? label) async {
+    if (label == null || label.trim().isEmpty) return;
+    if (!_initialized) return;
+
+    final client = GoogleCastRemoteMediaClient.instance;
+
+    // Parçalar oynatma başladıktan kısa süre sonra dolabilir; birkaç kez dene.
+    List<GoogleCastMediaTrack> audioTracks = const [];
+    for (var i = 0; i < 10; i++) {
+      final tracks = client.mediaStatus?.mediaInformation?.tracks ?? const [];
+      audioTracks =
+          tracks.where((t) => t.type == TrackType.audio).toList();
+      if (audioTracks.length > 1) break;
+      await Future<void>.delayed(const Duration(milliseconds: 400));
+    }
+
+    if (audioTracks.length < 2) {
+      Log.d(
+        'Cast',
+        'audio: alıcı birden çok ses parçası bildirmedi '
+            '(gömülü AC3/MKV olabilir), dil uygulanamadı',
+      );
+      return;
+    }
+
+    Log.d(
+      'Cast',
+      'audio tracks: ${audioTracks.map((t) => '${t.trackId}:${t.name}/${t.language}').join(', ')}',
+    );
+
+    final match = _matchAudioTrack(audioTracks, label);
+    if (match == null) {
+      Log.d('Cast', 'audio: "$label" için eşleşme bulunamadı');
+      return;
+    }
+
+    final active = client.mediaStatus?.activeTrackIds ?? const <int>[];
+    if (active.contains(match.trackId)) {
+      Log.d('Cast', 'audio zaten aktif: ${match.trackId}');
+      return;
+    }
+
+    try {
+      await client.setActiveTrackIDs([match.trackId]);
+      Log.d(
+        'Cast',
+        'audio uygulandı: ${match.trackId} (${match.name}/${match.language})',
+      );
+    } catch (e) {
+      Log.d('Cast', 'setActiveTrackIDs: $e');
+    }
+  }
+
+  GoogleCastMediaTrack? _matchAudioTrack(
+    List<GoogleCastMediaTrack> tracks,
+    String preferred,
+  ) {
+    final pref = preferred.trim().toLowerCase();
+    if (pref.isEmpty) return null;
+
+    String cand(GoogleCastMediaTrack t) =>
+        '${t.name ?? ''} ${t.language?.toString() ?? ''}'.trim().toLowerCase();
+
+    // Birebir / içeren eşleşme
+    for (final t in tracks) {
+      final c = cand(t);
+      if (c.isNotEmpty && (c.contains(pref) || pref.contains(c))) return t;
+    }
+
+    // Dil token'ı puanlaması
+    final tokens = _languageTokens(pref);
+    GoogleCastMediaTrack? best;
+    var bestScore = 0;
+    for (final t in tracks) {
+      final c = cand(t);
+      var score = 0;
+      for (final tok in tokens) {
+        if (c.contains(tok)) score += tok.length;
+      }
+      if (score > bestScore) {
+        bestScore = score;
+        best = t;
+      }
+    }
+    return bestScore > 0 ? best : null;
+  }
+
+  static List<String> _languageTokens(String label) {
+    final l = label.toLowerCase();
+    final tokens = <String>{l};
+    if (l.contains('türk') ||
+        l.contains('turk') ||
+        l.contains('turkish') ||
+        l.contains('turc') ||
+        RegExp(r'\btr\b').hasMatch(l) ||
+        l.contains('[tr]') ||
+        l.contains('(tr)')) {
+      tokens.addAll(['türk', 'turk', 'turkish', 'turc', 'tur', 'tr']);
+    }
+    if (l.contains('eng') ||
+        l.contains('i̇ng') ||
+        l.contains('ing') ||
+        l.contains('ingiliz') ||
+        l.contains('anglais')) {
+      tokens.addAll(['eng', 'english', 'ingiliz', 'anglais', 'en']);
+    }
+    if (l.contains('fran') || l.contains('frans') || l.contains('french')) {
+      tokens.addAll(['fran', 'french', 'fra', 'fr', 'français']);
+    }
+    if (l.contains('deu') ||
+        l.contains('ger') ||
+        l.contains('alman') ||
+        l.contains('german')) {
+      tokens.addAll(['deu', 'ger', 'german', 'alman', 'deutsch', 'de']);
+    }
+    if (l.contains('arap') || l.contains('arab') || RegExp(r'\bar\b').hasMatch(l)) {
+      tokens.addAll(['arap', 'arab', 'arabic', 'ara', 'ar']);
+    }
+    if (l.contains('rus') || l.contains('russian')) {
+      tokens.addAll(['rus', 'russian', 'ru']);
+    }
+    if (l.contains('ispany') || l.contains('span') || l.contains('espa')) {
+      tokens.addAll(['span', 'spanish', 'espanol', 'español', 'spa', 'es']);
+    }
+    return tokens.toList();
   }
 
   static const _playbackChannel = MethodChannel('iptv.playback/control');

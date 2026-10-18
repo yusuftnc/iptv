@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/content_item.dart';
 import '../models/playlist_episode.dart';
 import '../models/watch_history.dart';
+import '../services/cloud_sync_service.dart';
 import '../services/iptv_service.dart';
 import '../services/database_service.dart';
 import 'player_screen.dart';
@@ -19,7 +20,8 @@ class SeriesDetailScreen extends StatefulWidget {
   State<SeriesDetailScreen> createState() => _SeriesDetailScreenState();
 }
 
-class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
+class _SeriesDetailScreenState extends State<SeriesDetailScreen>
+    with WidgetsBindingObserver {
   final IptvService _iptvService = IptvService();
   final DatabaseService _databaseService = DatabaseService();
 
@@ -48,14 +50,36 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
   @override
   void initState() {
     super.initState();
-    _checkIfFavorite();
+    WidgetsBinding.instance.addObserver(this);
+    CloudSyncService.instance.revision.addListener(_onCloudRevision);
+    _checkIfFavorite(fromCloud: true);
     _bootstrapSeriesScreen();
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    CloudSyncService.instance.revision.removeListener(_onCloudRevision);
+    super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      _checkIfFavorite(fromCloud: true);
+      _refreshResumeFromDb(fromCloud: true);
+    }
+  }
+
+  void _onCloudRevision() {
+    _refreshResumeFromDb();
+    _checkIfFavorite();
   }
 
   /// Önce dizi için kayıtlı bölüm/pozisyon yüklenir; sonra API'den sezonlar gelir ve
   /// doğru sezon otomatik seçilir — aksi halde "Devam Et" yanlış sezonda kalırdı.
   Future<void> _bootstrapSeriesScreen() async {
-    await _checkResumeHistory();
+    await _checkResumeHistory(fromCloud: true);
     await _loadSeriesDetails();
   }
 
@@ -80,8 +104,8 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     return null;
   }
 
-  Future<void> _refreshResumeFromDb() async {
-    await _checkResumeHistory();
+  Future<void> _refreshResumeFromDb({bool fromCloud = false}) async {
+    await _checkResumeHistory(fromCloud: fromCloud);
     final season = _resumeHistory != null
         ? _seasonContainingEpisodeId(_resumeHistory!.contentId)
         : null;
@@ -93,8 +117,11 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     }
   }
 
-  Future<void> _checkIfFavorite() async {
-    final isFavorite = await _databaseService.isFavorite(widget.seriesItem.id);
+  Future<void> _checkIfFavorite({bool fromCloud = false}) async {
+    final isFavorite = await _databaseService.isFavorite(
+      widget.seriesItem.id,
+      refreshFromCloud: fromCloud,
+    );
     if (mounted) {
       setState(() {
         _isFavorite = isFavorite;
@@ -165,9 +192,11 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
     }
   }
 
-  Future<void> _checkResumeHistory() async {
-    final history =
-        await _databaseService.getWatchPosition(_seriesHistoryLookupKey());
+  Future<void> _checkResumeHistory({bool fromCloud = false}) async {
+    final history = await _databaseService.getWatchPosition(
+      _seriesHistoryLookupKey(),
+      refreshFromCloud: fromCloud,
+    );
     if (mounted) {
       setState(() {
         _resumeHistory = history;
@@ -228,7 +257,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen> {
         },
         transitionDuration: const Duration(milliseconds: 100),
       ),
-    ).then((_) => _refreshResumeFromDb());
+    ).then((_) => _refreshResumeFromDb(fromCloud: true));
   }
 
   void _playEpisode(Map<String, dynamic> episode) {
