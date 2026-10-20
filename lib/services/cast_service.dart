@@ -11,7 +11,7 @@ import 'package:flutter_chrome_cast/enums.dart';
 import 'package:flutter_chrome_cast/media.dart';
 import 'package:flutter_chrome_cast/models.dart';
 import 'package:flutter_chrome_cast/session.dart';
-import 'package:iptv_app/utils/logger.dart';
+import 'package:sutu_player/utils/logger.dart';
 
 /// Google Cast (Chromecast / Cast destekli Android TV) yansıtma.
 class CastService {
@@ -253,7 +253,7 @@ class CastService {
       hlsSegmentFormat: profile.hlsSegmentFormat,
       hlsVideoSegmentFormat: profile.hlsVideoSegmentFormat,
       metadata: GoogleCastMovieMediaMetadata(
-        title: title.isNotEmpty ? title : 'IPTV',
+        title: title.isNotEmpty ? title : 'SUTU Player',
         images: images,
       ),
     );

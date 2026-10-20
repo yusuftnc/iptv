@@ -3,12 +3,12 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
-import 'package:iptv_app/utils/logger.dart';
+import 'package:sutu_player/utils/logger.dart';
 import '../models/content_item.dart';
 import '../services/iptv_service.dart';
 import '../services/cloud_sync_service.dart';
 import '../services/storage_service.dart';
-import 'discover_screen.dart';
+import 'source_screen.dart';
 import 'player_screen.dart';
 import 'series_detail_screen.dart';
 import 'search_screen.dart';
@@ -196,12 +196,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   Future<void> _logout() async {
     await CloudSyncService.instance.stop();
     final storageService = StorageService();
-    await storageService.clearCredentials();
+    await storageService.clearActivePlaylist();
 
     if (mounted) {
       Navigator.pushReplacement(
         context,
-        MaterialPageRoute(builder: (context) => const DiscoverScreen()),
+        MaterialPageRoute(builder: (context) => const SourceScreen()),
       );
     }
   }
@@ -282,7 +282,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       const Text(
-                        'IPTV',
+                        'SUTU Player',
                         style: TextStyle(
                           color: Colors.white,
                           fontSize: 24,

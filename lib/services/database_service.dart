@@ -1,7 +1,7 @@
 import 'dart:async';
 
 import 'package:hive/hive.dart';
-import 'package:iptv_app/utils/logger.dart';
+import 'package:sutu_player/utils/logger.dart';
 import '../models/favorite_item.dart';
 import '../models/watch_history.dart';
 import '../models/user_settings.dart';

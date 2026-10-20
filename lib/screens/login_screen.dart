@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import '../models/saved_playlist.dart';
 import '../services/cloud_sync_service.dart';
 import '../services/iptv_service.dart';
 import '../services/storage_service.dart';
@@ -13,8 +14,8 @@ class LoginScreen extends StatefulWidget {
 
 class _LoginScreenState extends State<LoginScreen> {
   final _formKey = GlobalKey<FormState>();
+  final _nameController = TextEditingController();
   final _hostController = TextEditingController();
-  final _portController = TextEditingController();
   final _usernameController = TextEditingController();
   final _passwordController = TextEditingController();
   bool _isLoading = false;
@@ -22,27 +23,9 @@ class _LoginScreenState extends State<LoginScreen> {
   String _errorMessage = '';
 
   @override
-  void initState() {
-    super.initState();
-    _loadSavedCredentials();
-  }
-
-  Future<void> _loadSavedCredentials() async {
-    final storageService = StorageService();
-    final credentials = await storageService.getCredentials();
-    
-    setState(() {
-      _hostController.text = credentials['host'] ?? '';
-      _portController.text = credentials['port'] ?? '';
-      _usernameController.text = credentials['username'] ?? '';
-      _passwordController.text = credentials['password'] ?? '';
-    });
-  }
-
-  @override
   void dispose() {
+    _nameController.dispose();
     _hostController.dispose();
-    _portController.dispose();
     _usernameController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -56,10 +39,11 @@ class _LoginScreenState extends State<LoginScreen> {
       });
 
       try {
+        final server = IptvService.normalizeServerBaseUrl(_hostController.text, '');
         final iptvService = IptvService();
         await iptvService.initialize(
-          host: _hostController.text,
-          port: _portController.text,
+          host: server,
+          port: '',
           username: _usernameController.text,
           password: _passwordController.text,
         );
@@ -67,20 +51,28 @@ class _LoginScreenState extends State<LoginScreen> {
         final success = await iptvService.login();
 
         if (success) {
-          // Giriş başarılı, bilgileri kaydet
+          final storageService = StorageService();
+          final playlist = SavedPlaylist(
+            id: DateTime.now().microsecondsSinceEpoch.toString(),
+            name: _nameController.text.trim(),
+            kind: 'xtream',
+            host: server,
+            username: _usernameController.text,
+            password: _passwordController.text,
+          );
           if (_rememberMe) {
-            final storageService = StorageService();
+            await storageService.savePlaylist(playlist);
             await storageService.saveCredentials(
-              host: _hostController.text,
-              port: _portController.text,
+              host: server,
+              port: '',
               username: _usernameController.text,
               password: _passwordController.text,
             );
           }
 
           await CloudSyncService.instance.start(
-            host: _hostController.text,
-            port: _portController.text,
+            host: server,
+            port: '',
             username: _usernameController.text,
             password: _passwordController.text,
           );
@@ -149,38 +141,47 @@ class _LoginScreenState extends State<LoginScreen> {
                 ),
                 const SizedBox(height: largeIconSpacing),
                 TextFormField(
-                  controller: _hostController,
+                  controller: _nameController,
+                  textCapitalization: TextCapitalization.sentences,
                   decoration: const InputDecoration(
-                    labelText: 'Sunucu Adresi',
-                    prefixIcon: Icon(Icons.dns),
-                    border: OutlineInputBorder(),
+                    labelText: 'Playlist adı',
+                    prefixIcon: Icon(Icons.bookmark_outline),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(10)),
+                    ),
                     filled: true,
                     fillColor: Colors.white10,
                     labelStyle: TextStyle(color: Colors.white70),
                   ),
                   style: const TextStyle(color: Colors.white),
                   validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Lütfen sunucu adresini girin';
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Lütfen playlist adını girin';
                     }
                     return null;
                   },
                 ),
                 const SizedBox(height: verticalSpacing),
                 TextFormField(
-                  controller: _portController,
+                  controller: _hostController,
+                  keyboardType: TextInputType.url,
+                  autocorrect: false,
                   decoration: const InputDecoration(
-                    labelText: 'Port',
-                    prefixIcon: Icon(Icons.settings_ethernet),
-                    border: OutlineInputBorder(),
+                    labelText: 'Sunucu Adresi',
+                    hintText: 'http://sunucu:8080',
+                    prefixIcon: Icon(Icons.dns),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(10)),
+                    ),
                     filled: true,
                     fillColor: Colors.white10,
                     labelStyle: TextStyle(color: Colors.white70),
+                    hintStyle: TextStyle(color: Colors.white38),
                   ),
                   style: const TextStyle(color: Colors.white),
                   validator: (value) {
-                    if (value == null || value.isEmpty) {
-                      return 'Lütfen port numarasını girin';
+                    if (value == null || value.trim().isEmpty) {
+                      return 'Lütfen sunucu adresini girin';
                     }
                     return null;
                   },
@@ -191,7 +192,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   decoration: const InputDecoration(
                     labelText: 'Kullanıcı Adı',
                     prefixIcon: Icon(Icons.person),
-                    border: OutlineInputBorder(),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(10)),
+                    ),
                     filled: true,
                     fillColor: Colors.white10,
                     labelStyle: TextStyle(color: Colors.white70),
@@ -210,7 +213,9 @@ class _LoginScreenState extends State<LoginScreen> {
                   decoration: const InputDecoration(
                     labelText: 'Şifre',
                     prefixIcon: Icon(Icons.lock),
-                    border: OutlineInputBorder(),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.all(Radius.circular(10)),
+                    ),
                     filled: true,
                     fillColor: Colors.white10,
                     labelStyle: TextStyle(color: Colors.white70),

@@ -1,8 +1,9 @@
 import 'package:flutter_secure_storage/flutter_secure_storage.dart';
-import 'package:iptv_app/utils/logger.dart';
+import 'package:sutu_player/utils/logger.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import 'dart:convert';
 
+import '../models/saved_playlist.dart';
 import 'credential_crypto.dart';
 
 class StorageService {
@@ -10,6 +11,7 @@ class StorageService {
 
   /// Tek kayıt: AES-GCM şifreli JSON (değerler diskte düz metin değil).
   static const String _encBlobKey = 'iptv_creds_enc';
+  static const String _playlistsKey = 'iptv_playlists_enc';
 
   /// Eski sürüm düz metin anahtarları (sadece göç için).
   static const String _hostKey = 'iptv_host';
@@ -208,4 +210,92 @@ class StorageService {
   }
 
   static const String subtitleOffSentinel = '__off__';
+
+  Future<List<SavedPlaylist>> getPlaylists() async {
+    final sealed = await _secureStorage.read(key: _playlistsKey);
+    if (sealed == null || sealed.isEmpty) {
+      final legacy = playlistFromLegacyCredentials(await getCredentials());
+      final bundle = _PlaylistBundle();
+      if (legacy != null) {
+        bundle.items.add(legacy);
+        bundle.activeId = legacy.id;
+      }
+      await _writePlaylistBundle(bundle);
+      return bundle.items;
+    }
+    return (await _readPlaylistBundle()).items;
+  }
+
+  Future<String?> getActivePlaylistId() async {
+    return (await _readPlaylistBundle()).activeId;
+  }
+
+  Future<void> setActivePlaylistId(String id) async {
+    final bundle = await _readPlaylistBundle();
+    bundle.activeId = id;
+    await _writePlaylistBundle(bundle);
+  }
+
+  Future<void> clearActivePlaylist() async {
+    final bundle = await _readPlaylistBundle();
+    bundle.activeId = null;
+    await _writePlaylistBundle(bundle);
+  }
+
+  Future<void> savePlaylist(SavedPlaylist playlist) async {
+    final bundle = await _readPlaylistBundle();
+    final index = bundle.items.indexWhere((item) => item.id == playlist.id);
+    if (index >= 0) {
+      bundle.items[index] = playlist;
+    } else {
+      bundle.items.add(playlist);
+    }
+    bundle.activeId = playlist.id;
+    await _writePlaylistBundle(bundle);
+  }
+
+  Future<void> deletePlaylist(String id) async {
+    final bundle = await _readPlaylistBundle();
+    bundle.items.removeWhere((item) => item.id == id);
+    if (bundle.activeId == id) bundle.activeId = null;
+    await _writePlaylistBundle(bundle);
+  }
+
+  Future<_PlaylistBundle> _readPlaylistBundle() async {
+    final sealed = await _secureStorage.read(key: _playlistsKey);
+    if (sealed == null || sealed.isEmpty) {
+      return _PlaylistBundle();
+    }
+    try {
+      final clear = await CredentialCrypto.decryptToUtf8(sealed);
+      final decoded = json.decode(clear) as Map<String, dynamic>;
+      final rawItems = decoded['items'] as List<dynamic>? ?? [];
+      final items = rawItems
+          .whereType<Map<String, dynamic>>()
+          .map(SavedPlaylist.fromJson)
+          .where((item) => item.id.isNotEmpty && item.name.isNotEmpty)
+          .toList();
+      final activeId = decoded['activeId']?.toString();
+      return _PlaylistBundle()
+        ..items.addAll(items)
+        ..activeId = activeId == null || activeId.isEmpty ? null : activeId;
+    } catch (e, st) {
+      Log.e('StorageService', e, st);
+      return _PlaylistBundle();
+    }
+  }
+
+  Future<void> _writePlaylistBundle(_PlaylistBundle bundle) async {
+    final payload = json.encode({
+      'activeId': bundle.activeId,
+      'items': bundle.items.map((item) => item.toJson()).toList(),
+    });
+    final sealed = await CredentialCrypto.encryptJson(payload);
+    await _secureStorage.write(key: _playlistsKey, value: sealed);
+  }
+}
+
+class _PlaylistBundle {
+  final List<SavedPlaylist> items = [];
+  String? activeId;
 }

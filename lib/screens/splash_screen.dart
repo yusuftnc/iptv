@@ -1,9 +1,14 @@
 import 'package:flutter/material.dart';
+import '../models/saved_playlist.dart';
 import '../services/cloud_sync_service.dart';
-import '../services/storage_service.dart';
 import '../services/iptv_service.dart';
-import 'discover_screen.dart';
+import '../services/m3u_parser.dart';
+import '../services/playlist_content.dart';
+import '../services/storage_service.dart';
 import 'home_screen.dart';
+import 'm3u_list_screen.dart';
+import 'player_screen.dart';
+import 'source_screen.dart';
 
 class SplashScreen extends StatefulWidget {
   const SplashScreen({super.key});
@@ -24,68 +29,95 @@ class _SplashScreenState extends State<SplashScreen> {
     
     if (!mounted) return;
     
-    final storageService = StorageService();
-    final hasCredentials = await storageService.hasCredentials();
-
-    if (hasCredentials) {
-      // Kayıtlı giriş bilgileri var, otomatik giriş yap
-      final credentials = await storageService.getCredentials();
-      
-      final iptvService = IptvService();
-      
-      await iptvService.initialize(
-        host: credentials['host']!,
-        port: credentials['port']!,
-        username: credentials['username']!,
-        password: credentials['password']!,
-      );
-      
-      final loginSuccess = await iptvService.login();
-      
-      if (loginSuccess && mounted) {
-        await CloudSyncService.instance.start(
-          host: credentials['host']!,
-          port: credentials['port']!,
-          username: credentials['username']!,
-          password: credentials['password']!,
-        );
-        if (!mounted) return;
-        Navigator.pushReplacement(
-          context,
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) => const HomeScreen(),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-            transitionDuration: const Duration(milliseconds: 100),
-          ),
-        );
-      } else if (mounted) {
-        // Giriş başarısız, login ekranına git
-        Navigator.pushReplacement(
-          context,
-          PageRouteBuilder(
-            pageBuilder: (context, animation, secondaryAnimation) => const DiscoverScreen(),
-            transitionsBuilder: (context, animation, secondaryAnimation, child) {
-              return FadeTransition(opacity: animation, child: child);
-            },
-            transitionDuration: const Duration(milliseconds: 100),
-          ),
-        );
+    final storage = StorageService();
+    SavedPlaylist? active;
+    try {
+      final playlists = await storage.getPlaylists();
+      final activeId = await storage.getActivePlaylistId();
+      for (final playlist in playlists) {
+        if (playlist.id == activeId) {
+          active = playlist;
+          break;
+        }
       }
-    } else if (mounted) {
-      // Kayıtlı giriş bilgileri yok, login ekranına git
-      Navigator.pushReplacement(
-        context,
-        PageRouteBuilder(
-          pageBuilder: (context, animation, secondaryAnimation) => const DiscoverScreen(),
-          transitionsBuilder: (context, animation, secondaryAnimation, child) {
-            return FadeTransition(opacity: animation, child: child);
-          },
-          transitionDuration: const Duration(milliseconds: 100),
-        ),
-      );
+    } catch (_) {
+      active = null;
     }
+    if (!mounted) return;
+
+    if (active != null && active.isXtream) {
+      final opened = await _openXtream(active);
+      if (!mounted) return;
+      if (opened) return;
+    } else if (active != null) {
+      final opened = await _openM3u(active);
+      if (!mounted) return;
+      if (opened) return;
+    }
+
+    _go(const SourceScreen());
+  }
+
+  Future<bool> _openXtream(SavedPlaylist playlist) async {
+    final iptv = IptvService();
+    await iptv.initialize(
+      host: playlist.host,
+      port: playlist.port,
+      username: playlist.username,
+      password: playlist.password,
+    );
+    final ok = await iptv.login();
+    if (!ok || !mounted) return false;
+    await CloudSyncService.instance.start(
+      host: playlist.host,
+      port: playlist.port,
+      username: playlist.username,
+      password: playlist.password,
+    );
+    if (!mounted) return false;
+    _go(const HomeScreen());
+    return true;
+  }
+
+  Future<bool> _openM3u(SavedPlaylist playlist) async {
+    try {
+      final parsed = await PlaylistContent.load(playlist);
+      if (!mounted || !parsed.isValid) return false;
+      if (parsed.isHls) {
+        final uri = playlist.m3uPath.isNotEmpty
+            ? Uri.file(playlist.m3uPath).toString()
+            : playlist.m3uUrl;
+        _go(PlayerScreen(
+          contentId: playlist.id,
+          streamUrl: uri,
+          contentType: 'live',
+          name: playlist.name,
+          historyId: playlist.id,
+        ));
+        return true;
+      }
+      _go(M3uListScreen(
+        title: playlist.name,
+        entries: parsed.entries,
+        backToSources: true,
+      ));
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
+  void _go(Widget page) {
+    Navigator.pushReplacement(
+      context,
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => page,
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 100),
+      ),
+    );
   }
 
   @override
@@ -103,7 +135,7 @@ class _SplashScreenState extends State<SplashScreen> {
             ),
             const SizedBox(height: 20),
             const Text(
-              'IPTV App',
+              'SUTU Player',
               style: TextStyle(
                 color: Colors.white,
                 fontSize: 24,

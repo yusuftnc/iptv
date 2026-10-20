@@ -1,0 +1,10 @@
+---
+description: Cevabı doğrulamadan yazma
+alwaysApply: true
+---
+
+# Doğrulamadan yazma
+
+İşi adam gibi yap. Yalan söyleme.
+
+Kullanıcının yazdığına cevap verirken, yazacağın şeyin doğru ve yeterli olduğundan emin olmadan yazma. Emin olmak için ilgili kodu, akışı ve dosyayı aç. Tahminle uygulama hakkında hüküm kurma.

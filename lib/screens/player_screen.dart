@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
-import 'package:iptv_app/utils/logger.dart';
+import 'package:sutu_player/utils/logger.dart';
 import '../models/content_item.dart';
 import '../models/playlist_episode.dart';
 import '../services/iptv_service.dart';
@@ -31,6 +31,9 @@ class PlayerScreen extends StatefulWidget {
   /// Önceki bölümden geçişte yatay kilit durumunu koru.
   final bool lockLandscape;
 
+  /// Tek yayın adresinde katalog kaydı olmadığı için favori anlamsız.
+  final bool allowFavorite;
+
   const PlayerScreen({
     Key? key,
     required this.contentId,
@@ -42,6 +45,7 @@ class PlayerScreen extends StatefulWidget {
     this.playlist,
     this.playlistIndex,
     this.lockLandscape = false,
+    this.allowFavorite = true,
   }) : super(key: key);
 
   @override
@@ -86,6 +90,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Resume seek bir kez yapıldı mı? Thrash'i önler (VLC hazır olunca tek seek).
   bool _initialSeekDone = false;
   Timer? _initialSeekFallbackTimer;
+
+  /// Kaldığı yer henüz oynatıcıda görünmeden yazılan konum, kayıtlı süreyi ezmesin.
+  bool _resumeSeekSettled = false;
 
   // İzleme geçmişi anahtarı
   late final String _historyId;
@@ -182,7 +189,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     _checkWatchPosition().then((_) {
       _initializePlayer();
-      _checkIfFavorite();
+      if (widget.allowFavorite) _checkIfFavorite();
       _startHideControlsTimer();
     });
 
@@ -477,13 +484,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
           "Debug - İlk izleme pozisyonu kontrolü başlatılıyor: ${widget.contentId}");
       Log.d("DBG", "Debug - İzleme geçmişine ekleniyor: ${widget.contentId}");
 
-      // İlk olarak izleme geçmişine ekle
+      final existing = await _databaseService.getWatchPosition(_historyId);
+      final sameVideo =
+          existing != null && existing.contentId == widget.contentId;
+
+      // Açılış kaydı pozisyon taşımaz. Aynı videonun kayıtlı yerini null ile ezmek
+      // "Devam Et" düğmesini düşürür; kullanıcı seek bitmeden geri dönerse özellikle.
       await _databaseService.addToWatchHistory(ContentItem(
         id: widget.contentId,
         name: widget.name,
         streamUrl: _streamUrlForStorage,
         streamType: widget.contentType,
         streamIcon: widget.streamIcon,
+        position: sameVideo ? existing.position : null,
+        duration: sameVideo ? existing.duration : null,
         historyId: _historyId,
       ));
       Log.d("DBG", "Debug - İzleme geçmişine eklendi");
@@ -494,6 +508,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _updateWatchPosition() async {
     try {
+      if (_shouldSeekToInitialPosition && !_resumeSeekSettled) {
+        Log.d("DBG",
+            "Debug - Resume henüz oturmadı, kayıtlı pozisyon korunuyor");
+        return;
+      }
       if (_controller != null &&
           _currentPosition.inSeconds > 0 &&
           _totalDuration.inSeconds > 0 &&
@@ -1159,6 +1178,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
             _showNextEpisodeCta = nearEnd;
           });
 
+          final resumeTarget = _initialSeekPosition;
+          if (_shouldSeekToInitialPosition &&
+              !_resumeSeekSettled &&
+              resumeTarget != null &&
+              position.inSeconds + 15 >= resumeTarget) {
+            _resumeSeekSettled = true;
+          }
+
           if ((position.inSeconds % 5 == 0 ||
                   (position.inSeconds - (_lastSavedPosition?.inSeconds ?? 0))
                           .abs() >=
@@ -1512,6 +1539,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
     } catch (e) {
       Log.d("DBG", "Debug - Resume seek hatası: $e");
+    }
+
+    if (!mounted || _controller == null) return;
+    final landedAt = _controller!.value.position.inSeconds;
+    if (landedAt + 15 >= position) {
+      _resumeSeekSettled = true;
     }
 
     // Seek, VLC'nin ses/altyazı seçimini varsayılana döndürebilir.
@@ -1921,12 +1954,18 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (_hasPreviousEpisode) ...[
+                    if (_playlist != null && _playlistIndex != null) ...[
                       IconButton(
                         iconSize: iconSize,
-                        icon: const Icon(Icons.skip_previous,
-                            color: Colors.white),
-                        onPressed: () => _playAdjacentEpisode(-1),
+                        icon: Icon(
+                          Icons.skip_previous,
+                          color: _hasPreviousEpisode
+                              ? Colors.white
+                              : Colors.white38,
+                        ),
+                        onPressed: _hasPreviousEpisode
+                            ? () => _playAdjacentEpisode(-1)
+                            : null,
                         tooltip: 'Önceki Bölüm',
                       ),
                       const SizedBox(width: spacing / 2),
@@ -2103,15 +2142,23 @@ class _PlayerScreenState extends State<PlayerScreen> {
           itemBuilder: (context) => [
             PopupMenuItem(
               value: 'favorite',
+              enabled: widget.allowFavorite,
               child: Row(
                 children: [
                   Icon(
                     _isFavorite ? Icons.favorite : Icons.favorite_border,
-                    color: _isFavorite ? Colors.red : null,
+                    color: widget.allowFavorite
+                        ? (_isFavorite ? Colors.red : null)
+                        : Colors.white38,
                     size: 20,
                   ),
                   const SizedBox(width: 10),
-                  Text(_isFavorite ? 'Favorilerden Çıkar' : 'Favorilere Ekle'),
+                  Text(
+                    _isFavorite ? 'Favorilerden Çıkar' : 'Favorilere Ekle',
+                    style: TextStyle(
+                      color: widget.allowFavorite ? null : Colors.white38,
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -2210,9 +2257,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
             IconButton(
               icon: Icon(
                 _isFavorite ? Icons.favorite : Icons.favorite_border,
-                color: _isFavorite ? Colors.red : Colors.white,
+                color: !widget.allowFavorite
+                    ? Colors.white38
+                    : (_isFavorite ? Colors.red : Colors.white),
               ),
-              onPressed: _toggleFavorite,
+              onPressed: widget.allowFavorite ? _toggleFavorite : null,
             ),
             IconButton(
               icon: Icon(
@@ -2281,7 +2330,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _handleMenuSelection(String value) async {
     switch (value) {
       case 'favorite':
-        _toggleFavorite();
+        if (widget.allowFavorite) _toggleFavorite();
         break;
       case 'audio':
         _showAudioDialog();
