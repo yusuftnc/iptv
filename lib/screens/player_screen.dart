@@ -4,6 +4,7 @@ import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import 'package:sutu_player/utils/logger.dart';
 import '../models/content_item.dart';
 import '../models/playlist_episode.dart';
+import '../services/app_settings.dart';
 import '../services/iptv_service.dart';
 import '../services/database_service.dart';
 import '../services/storage_service.dart';
@@ -1680,7 +1681,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               return ListTile(
                 title: Text(name.isNotEmpty ? name : 'Parça $id'),
                 trailing: id == _currentAudioId
-                    ? const Icon(Icons.check, color: Colors.blue)
+                    ? Icon(Icons.check, color: context.accent)
                     : null,
                 onTap: () {
                   _setAudioTrack(id);
@@ -1760,12 +1761,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
+      return Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+              valueColor: AlwaysStoppedAnimation<Color>(context.accent),
             ),
             SizedBox(height: 16),
             Text(
@@ -1800,7 +1801,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ElevatedButton(
               onPressed: _initializePlayer,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
+                backgroundColor: context.accent,
                 padding:
                     const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               ),
@@ -1849,7 +1850,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             top: 72,
             child: SafeArea(
               child: Material(
-                color: Colors.blue.shade800.withValues(alpha: 0.92),
+                color: const Color(0xFF1565C0).withValues(alpha: 0.92),
                 borderRadius: BorderRadius.circular(8),
                 child: Padding(
                   padding:
@@ -2193,7 +2194,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
                     Icon(
                       _isCasting ? Icons.cast_connected : Icons.cast,
                       size: 20,
-                      color: _isCasting ? Colors.blue : null,
+                      color: _isCasting ? context.accent : null,
                     ),
                     const SizedBox(width: 10),
                     Text(_isCasting ? 'Yansıtmayı Durdur' : 'TV’ye Yansıt'),
@@ -2271,7 +2272,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               IconButton(
                 icon: Icon(
                   _isCasting ? Icons.cast_connected : Icons.cast,
-                  color: _isCasting ? Colors.blue : Colors.white,
+                  color: _isCasting ? context.accent : Colors.white,
                 ),
                 tooltip: _isCasting ? 'Yansıtmayı Durdur' : 'TV’ye Yansıt',
                 onPressed: () {
@@ -2386,7 +2387,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
               return ListTile(
                 title: Text(name.isNotEmpty ? name : 'Altyazı $id'),
                 trailing: id == _currentSubtitleId
-                    ? const Icon(Icons.check, color: Colors.blue)
+                    ? Icon(Icons.check, color: context.accent)
                     : null,
                 onTap: () {
                   _setSubtitle(id);

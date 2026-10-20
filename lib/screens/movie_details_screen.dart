@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/movie_details.dart';
 import '../models/content_item.dart';
 import '../models/watch_history.dart';
+import '../services/app_settings.dart';
 import '../services/cloud_sync_service.dart';
 import '../services/database_service.dart';
 import 'player_screen.dart';
@@ -119,15 +120,15 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: context.palette.background,
       appBar: AppBar(
         title: Text(widget.movieDetails.name),
-        backgroundColor: Colors.blue,
+        backgroundColor: context.accent,
         actions: [
           IconButton(
             icon: Icon(
               _isFavorite ? Icons.favorite : Icons.favorite_border,
-              color: _isFavorite ? Colors.red : Colors.white,
+              color: _isFavorite ? Colors.red : context.palette.text,
             ),
             onPressed: _toggleFavorite,
           ),
@@ -164,10 +165,10 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
                   // Title
                   Text(
                     widget.movieDetails.name,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: context.palette.text,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -199,19 +200,19 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
 
                   // Description
                   if (widget.movieDetails.description.isNotEmpty) ...[
-                    const Text(
+                    Text(
                       'Açıklama',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: context.palette.text,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       widget.movieDetails.description,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: context.palette.text,
                         fontSize: 16,
                       ),
                     ),
@@ -241,7 +242,7 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
             _checkIfFavorite(fromCloud: true);
           });
         },
-        backgroundColor: _canResume ? Colors.green : Colors.blue,
+        backgroundColor: _canResume ? Colors.green : context.accent,
         icon: Icon(_canResume ? Icons.play_circle : Icons.play_arrow),
         label: Text(
           _canResume
@@ -269,8 +270,8 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
         Expanded(
           child: Text(
             value,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.palette.text,
               fontSize: 16,
             ),
           ),

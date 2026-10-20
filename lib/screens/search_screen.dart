@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:sutu_player/utils/logger.dart';
 import '../models/content_item.dart';
+import '../services/app_settings.dart';
 import '../services/iptv_service.dart';
 import '../services/storage_service.dart';
 import 'player_screen.dart';
@@ -210,10 +211,10 @@ class _SearchScreenState extends State<SearchScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: context.palette.background,
       appBar: AppBar(
         title: const Text('Arama'),
-        backgroundColor: Colors.blue,
+        backgroundColor: context.accent,
       ),
       body: Column(
         children: [
@@ -222,11 +223,11 @@ class _SearchScreenState extends State<SearchScreen> {
             padding: const EdgeInsets.all(8.0),
             child: TextField(
               controller: _searchController,
-              style: const TextStyle(color: Colors.white),
+              style: TextStyle(color: context.palette.text),
               decoration: InputDecoration(
                 hintText: 'Film, dizi veya kanal ara...',
                 hintStyle: TextStyle(color: Colors.grey[400]),
-                prefixIcon: const Icon(Icons.search, color: Colors.blue),
+                prefixIcon: Icon(Icons.search, color: context.accent),
                 suffixIcon: _searchController.text.isNotEmpty
                     ? IconButton(
                         icon: const Icon(Icons.clear, color: Colors.grey),
@@ -240,7 +241,7 @@ class _SearchScreenState extends State<SearchScreen> {
                       )
                     : null,
                 filled: true,
-                fillColor: Colors.grey[900],
+                fillColor: context.palette.card,
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.circular(10),
                   borderSide: BorderSide.none,
@@ -275,11 +276,11 @@ class _SearchScreenState extends State<SearchScreen> {
                             _updateFilters(channels: selected);
                           },
                           backgroundColor: Colors.grey[800],
-                          selectedColor: Colors.blue,
-                          checkmarkColor: Colors.white,
+                          selectedColor: context.accent,
+                          checkmarkColor: context.palette.text,
                           labelStyle: TextStyle(
                             color: _includeChannels
-                                ? Colors.white
+                                ? context.palette.text
                                 : Colors.grey[300],
                           ),
                         ),
@@ -291,11 +292,11 @@ class _SearchScreenState extends State<SearchScreen> {
                             _updateFilters(movies: selected);
                           },
                           backgroundColor: Colors.grey[800],
-                          selectedColor: Colors.blue,
-                          checkmarkColor: Colors.white,
+                          selectedColor: context.accent,
+                          checkmarkColor: context.palette.text,
                           labelStyle: TextStyle(
                             color: _includeMovies
-                                ? Colors.white
+                                ? context.palette.text
                                 : Colors.grey[300],
                           ),
                         ),
@@ -307,11 +308,11 @@ class _SearchScreenState extends State<SearchScreen> {
                             _updateFilters(series: selected);
                           },
                           backgroundColor: Colors.grey[800],
-                          selectedColor: Colors.blue,
-                          checkmarkColor: Colors.white,
+                          selectedColor: context.accent,
+                          checkmarkColor: context.palette.text,
                           labelStyle: TextStyle(
                             color: _includeSeries
-                                ? Colors.white
+                                ? context.palette.text
                                 : Colors.grey[300],
                           ),
                         ),
@@ -322,7 +323,7 @@ class _SearchScreenState extends State<SearchScreen> {
 
                 // Sıralama butonu
                 PopupMenuButton<Map<String, dynamic>>(
-                  icon: const Icon(Icons.sort, color: Colors.blue),
+                  icon: Icon(Icons.sort, color: context.accent),
                   tooltip: 'Sırala',
                   onSelected: (value) {
                     _updateSort(value['type'], value['ascending']);
@@ -335,15 +336,15 @@ class _SearchScreenState extends State<SearchScreen> {
                           Icon(
                             Icons.arrow_upward,
                             color: _sortType == 'name' && _sortAscending
-                                ? Colors.blue
+                                ? context.accent
                                 : Colors.grey,
                             size: 18,
                           ),
                           const SizedBox(width: 8),
                           const Text('A-Z'),
                           if (_sortType == 'name' && _sortAscending)
-                            const Icon(Icons.check,
-                                color: Colors.blue, size: 18),
+                            Icon(Icons.check,
+                                color: context.accent, size: 18),
                         ],
                       ),
                     ),
@@ -354,15 +355,15 @@ class _SearchScreenState extends State<SearchScreen> {
                           Icon(
                             Icons.arrow_downward,
                             color: _sortType == 'name' && !_sortAscending
-                                ? Colors.blue
+                                ? context.accent
                                 : Colors.grey,
                             size: 18,
                           ),
                           const SizedBox(width: 8),
                           const Text('Z-A'),
                           if (_sortType == 'name' && !_sortAscending)
-                            const Icon(Icons.check,
-                                color: Colors.blue, size: 18),
+                            Icon(Icons.check,
+                                color: context.accent, size: 18),
                         ],
                       ),
                     ),
@@ -374,15 +375,15 @@ class _SearchScreenState extends State<SearchScreen> {
                           Icon(
                             Icons.calendar_today,
                             color: _sortType == 'date' && !_sortAscending
-                                ? Colors.blue
+                                ? context.accent
                                 : Colors.grey,
                             size: 18,
                           ),
                           const SizedBox(width: 8),
                           const Text('Yeniden Eskiye'),
                           if (_sortType == 'date' && !_sortAscending)
-                            const Icon(Icons.check,
-                                color: Colors.blue, size: 18),
+                            Icon(Icons.check,
+                                color: context.accent, size: 18),
                         ],
                       ),
                     ),
@@ -393,15 +394,15 @@ class _SearchScreenState extends State<SearchScreen> {
                           Icon(
                             Icons.calendar_today,
                             color: _sortType == 'date' && _sortAscending
-                                ? Colors.blue
+                                ? context.accent
                                 : Colors.grey,
                             size: 18,
                           ),
                           const SizedBox(width: 8),
                           const Text('Eskiden Yeniye'),
                           if (_sortType == 'date' && _sortAscending)
-                            const Icon(Icons.check,
-                                color: Colors.blue, size: 18),
+                            Icon(Icons.check,
+                                color: context.accent, size: 18),
                         ],
                       ),
                     ),
@@ -414,9 +415,9 @@ class _SearchScreenState extends State<SearchScreen> {
           // İçerik alanı
           Expanded(
             child: _isLoading
-                ? const Center(
+                ? Center(
                     child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+                      valueColor: AlwaysStoppedAnimation<Color>(context.accent),
                     ),
                   )
                 : _errorMessage.isNotEmpty
@@ -432,7 +433,7 @@ class _SearchScreenState extends State<SearchScreen> {
                             const SizedBox(height: 16),
                             Text(
                               _errorMessage,
-                              style: const TextStyle(color: Colors.white),
+                              style: TextStyle(color: context.palette.text),
                               textAlign: TextAlign.center,
                             ),
                             const SizedBox(height: 24),
@@ -440,7 +441,7 @@ class _SearchScreenState extends State<SearchScreen> {
                               onPressed: () =>
                                   _performSearch(_searchController.text),
                               style: ElevatedButton.styleFrom(
-                                backgroundColor: Colors.blue,
+                                backgroundColor: context.accent,
                               ),
                               child: const Text('Tekrar Dene'),
                             ),
@@ -474,19 +475,19 @@ class _SearchScreenState extends State<SearchScreen> {
           child: Row(
             mainAxisAlignment: MainAxisAlignment.spaceBetween,
             children: [
-              const Text(
+              Text(
                 'Son Aramalar',
                 style: TextStyle(
-                  color: Colors.white,
+                  color: context.palette.text,
                   fontSize: 18,
                   fontWeight: FontWeight.bold,
                 ),
               ),
               TextButton(
                 onPressed: _clearSearchHistory,
-                child: const Text(
+                child: Text(
                   'Tümünü Temizle',
-                  style: TextStyle(color: Colors.blue),
+                  style: TextStyle(color: context.accent),
                 ),
               ),
             ],
@@ -507,7 +508,7 @@ class _SearchScreenState extends State<SearchScreen> {
                 leading: const Icon(Icons.history, color: Colors.grey),
                 title: Text(
                   query,
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: context.palette.text),
                 ),
                 trailing: IconButton(
                   icon: const Icon(Icons.delete, color: Colors.grey),
@@ -539,7 +540,7 @@ class _SearchScreenState extends State<SearchScreen> {
             const SizedBox(height: 16),
             Text(
               '"${_searchController.text}" için sonuç bulunamadı',
-              style: const TextStyle(color: Colors.white),
+              style: TextStyle(color: context.palette.text),
               textAlign: TextAlign.center,
             ),
           ],
@@ -577,8 +578,8 @@ class _SearchScreenState extends State<SearchScreen> {
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.palette.text,
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
@@ -587,13 +588,13 @@ class _SearchScreenState extends State<SearchScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: Colors.blue,
+              color: context.accent,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
               count.toString(),
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: context.palette.text,
                 fontSize: 12,
               ),
             ),
@@ -628,24 +629,24 @@ class _SearchScreenState extends State<SearchScreen> {
                     width: 40,
                     height: 40,
                     color: Colors.grey[800],
-                    child: const Icon(Icons.tv, color: Colors.white, size: 20),
+                    child: Icon(Icons.tv, color: context.palette.text, size: 20),
                   ),
                   errorWidget: (context, url, error) => Container(
                     width: 40,
                     height: 40,
                     color: Colors.grey[800],
-                    child: const Icon(Icons.tv, color: Colors.white, size: 20),
+                    child: Icon(Icons.tv, color: context.palette.text, size: 20),
                   ),
                 )
               : Container(
                   width: 40,
                   height: 40,
                   color: Colors.grey[800],
-                  child: const Icon(Icons.tv, color: Colors.white, size: 20),
+                  child: Icon(Icons.tv, color: context.palette.text, size: 20),
                 ),
           title: Text(
             channel['name'] ?? 'İsimsiz Kanal',
-            style: const TextStyle(color: Colors.white),
+            style: TextStyle(color: context.palette.text),
           ),
           subtitle: channel['category_name'] != null
               ? Text(
@@ -687,12 +688,12 @@ class _SearchScreenState extends State<SearchScreen> {
 
         // İkon widget'ını önceden oluştur
         final iconWidget = contentType == 'movie'
-            ? const Icon(Icons.movie, size: 30, color: Colors.white)
-            : const Icon(Icons.video_library, size: 30, color: Colors.white);
+            ? Icon(Icons.movie, size: 30, color: context.palette.text)
+            : Icon(Icons.video_library, size: 30, color: context.palette.text);
 
         return Card(
           clipBehavior: Clip.antiAlias,
-          color: Colors.grey[900],
+          color: context.palette.card,
           child: InkWell(
             onTap: () => _playContent(ContentItem.fromJson(item, contentType)),
             child: Stack(
@@ -724,8 +725,8 @@ class _SearchScreenState extends State<SearchScreen> {
                     color: Colors.black54,
                     child: Text(
                       name,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: context.palette.text,
                         fontSize: 12,
                       ),
                       maxLines: 2,

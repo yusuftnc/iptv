@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../models/saved_playlist.dart';
+import '../services/app_settings.dart';
 import '../services/cloud_sync_service.dart';
 import '../services/iptv_service.dart';
 import '../services/m3u_parser.dart';
@@ -67,7 +68,7 @@ class _SourceScreenState extends State<SourceScreen> {
     final ok = await iptv.login();
     if (!mounted) return;
     if (!ok) {
-      _showMessage('Giriş başarısız. Playlist kaydı duruyor.');
+      _showMessage(AppText.get('loginFailed'));
       return;
     }
     await _storage.setActivePlaylistId(playlist.id);
@@ -90,12 +91,12 @@ class _SourceScreenState extends State<SourceScreen> {
       parsed = await PlaylistContent.load(playlist);
     } catch (_) {
       if (!mounted) return;
-      _showMessage(playlist.isRemoteM3u ? 'Liste alınamadı.' : 'Dosya açılamadı.');
+      _showMessage(AppText.get(playlist.isRemoteM3u ? 'listFailed' : 'fileFailed'));
       return;
     }
     if (!mounted) return;
     if (!parsed.isValid) {
-      _showMessage('Geçersiz liste.');
+      _showMessage(AppText.get('invalidList'));
       return;
     }
     await _storage.setActivePlaylistId(playlist.id);
@@ -135,11 +136,11 @@ class _SourceScreenState extends State<SourceScreen> {
     final confirmed = await showDialog<bool>(
       context: context,
       builder: (context) => AlertDialog(
-        title: const Text('Playlist silinsin mi?'),
+        title: Text(AppText.get('deletePlaylistTitle')),
         content: Text(playlist.name),
         actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: const Text('Vazgeç')),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: const Text('Sil')),
+          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(AppText.get('cancel'))),
+          TextButton(onPressed: () => Navigator.pop(context, true), child: Text(AppText.get('delete'))),
         ],
       ),
     );
@@ -155,99 +156,163 @@ class _SourceScreenState extends State<SourceScreen> {
 
   @override
   Widget build(BuildContext context) {
+    AppSettingsScope.watch(context);
+    final dark = Theme.of(context).brightness == Brightness.dark;
+    final accent = context.accent;
+    final background = dark ? Colors.black : Colors.white;
+    final titleColor = dark ? Colors.white : Colors.black87;
+    final cardColor = dark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
+    final muted = dark ? Colors.white54 : Colors.black45;
+
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: background,
       body: SafeArea(
         child: Padding(
-          padding: const EdgeInsets.fromLTRB(20, 28, 20, 20),
+          padding: const EdgeInsets.fromLTRB(20, 12, 20, 20),
           child: Column(
             crossAxisAlignment: CrossAxisAlignment.stretch,
             children: [
-              const Icon(Icons.tv, color: Colors.blue, size: 72),
-              const SizedBox(height: 16),
-              const Text(
-                'Kaynak seç',
-                textAlign: TextAlign.center,
-                style: TextStyle(
-                  color: Colors.white,
-                  fontSize: 22,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              const SizedBox(height: 20),
-              if (_playlists.isNotEmpty)
-                Expanded(
-                  child: ListView.separated(
-                    itemCount: _playlists.length,
-                    separatorBuilder: (context, index) => const SizedBox(height: 8),
-                    itemBuilder: (context, index) {
-                      final playlist = _playlists[index];
-                      final opening = _openingId == playlist.id;
-                      return Material(
-                        color: Colors.grey[900],
-                        borderRadius: const BorderRadius.all(Radius.circular(10)),
-                        child: ListTile(
-                          leading: opening
-                              ? const SizedBox(
-                                  width: 24,
-                                  height: 24,
-                                  child: CircularProgressIndicator(strokeWidth: 2),
-                                )
-                              : Icon(
-                                  playlist.isXtream ? Icons.dns_outlined : Icons.playlist_play,
-                                  color: Colors.blue,
-                                ),
-                          title: Text(playlist.name, style: const TextStyle(color: Colors.white)),
-                          subtitle: Text(
-                            playlist.isXtream ? 'Xtream' : 'M3U',
-                            style: const TextStyle(color: Colors.white54),
-                          ),
-                          trailing: IconButton(
-                            tooltip: 'Sil',
-                            onPressed: opening ? null : () => _delete(playlist),
-                            icon: const Icon(Icons.delete_outline, color: Colors.white54),
-                          ),
-                          onTap: opening ? null : () => _open(playlist),
-                        ),
-                      );
-                    },
+              Row(
+                children: [
+                  _RoundControl(
+                    color: cardColor,
+                    child: IconButton(
+                      onPressed: () => AppSettings.instance.setDarkMode(!dark),
+                      icon: Icon(
+                        dark ? Icons.dark_mode_outlined : Icons.light_mode_outlined,
+                        color: accent,
+                      ),
+                    ),
                   ),
-                )
-              else
-                const SizedBox(height: 8),
-              _SourceCard(
-                icon: Icons.dns_outlined,
-                label: 'XTREAM',
-                onTap: () async {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const LoginScreen()),
-                  );
-                  await _loadPlaylists();
-                },
+                  const Spacer(),
+                  _RoundControl(
+                    color: cardColor,
+                    padding: const EdgeInsets.only(left: 22, right: 8),
+                    child: DropdownButtonHideUnderline(
+                      child: DropdownButton<String>(
+                        value: AppSettings.instance.language,
+                        borderRadius: const BorderRadius.all(Radius.circular(16)),
+                        dropdownColor: cardColor,
+                        icon: Icon(Icons.expand_more, color: muted),
+                        style: TextStyle(
+                          color: titleColor,
+                          fontSize: 15,
+                          fontWeight: FontWeight.w600,
+                        ),
+                        items: const [
+                          DropdownMenuItem(value: 'tr', child: Text('TR')),
+                          DropdownMenuItem(value: 'en', child: Text('EN')),
+                        ],
+                        onChanged: (value) {
+                          if (value != null) AppSettings.instance.setLanguage(value);
+                        },
+                      ),
+                    ),
+                  ),
+                ],
               ),
-              const SizedBox(height: 14),
-              _SourceCard(
-                icon: Icons.play_circle_outline,
-                label: 'TEK YAYIN',
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const SingleStreamScreen()),
-                  );
-                },
-              ),
-              const SizedBox(height: 14),
-              _SourceCard(
-                icon: Icons.playlist_play,
-                label: 'M3U',
-                onTap: () async {
-                  await Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const M3uAddScreen()),
-                  );
-                  await _loadPlaylists();
-                },
+              Expanded(
+                child: Column(
+                  children: [
+                    const Spacer(flex: 3),
+                    Icon(Icons.tv, color: accent, size: 72),
+                    const SizedBox(height: 16),
+                    Text(
+                      AppText.get('sourceTitle'),
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: titleColor,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                    const SizedBox(height: 24),
+                    if (_playlists.isNotEmpty)
+                      Flexible(
+                        child: ListView.separated(
+                          shrinkWrap: true,
+                          itemCount: _playlists.length,
+                          separatorBuilder: (context, index) => const SizedBox(height: 8),
+                          itemBuilder: (context, index) {
+                            final playlist = _playlists[index];
+                            final opening = _openingId == playlist.id;
+                            return Material(
+                              color: cardColor,
+                              borderRadius: const BorderRadius.all(Radius.circular(16)),
+                              child: ListTile(
+                                leading: opening
+                                    ? const SizedBox(
+                                        width: 24,
+                                        height: 24,
+                                        child: CircularProgressIndicator(strokeWidth: 2),
+                                      )
+                                    : playlist.isXtream
+                                        ? Icon(Icons.dns_outlined, color: accent)
+                                        : _M3uMark(color: accent, size: 24),
+                                title: Text(playlist.name, style: TextStyle(color: titleColor)),
+                                subtitle: Text(
+                                  playlist.isXtream ? 'Xtream' : 'M3U',
+                                  style: TextStyle(color: muted),
+                                ),
+                                trailing: IconButton(
+                                  tooltip: AppText.get('delete'),
+                                  onPressed: opening ? null : () => _delete(playlist),
+                                  icon: Icon(Icons.delete_outline, color: muted),
+                                ),
+                                onTap: opening ? null : () => _open(playlist),
+                              ),
+                            );
+                          },
+                        ),
+                      ),
+                    if (_playlists.isNotEmpty) const SizedBox(height: 16),
+                    _SourceCard(
+                      color: cardColor,
+                      labelColor: titleColor,
+                      iconColor: accent,
+                      icon: Icons.dns_outlined,
+                      label: 'XTREAM',
+                      onTap: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const LoginScreen()),
+                        );
+                        await _loadPlaylists();
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                    _SourceCard(
+                      color: cardColor,
+                      labelColor: titleColor,
+                      iconColor: accent,
+                      icon: Icons.play_circle_outline,
+                      label: AppText.get('singleStream'),
+                      onTap: () {
+                        Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const SingleStreamScreen()),
+                        );
+                      },
+                    ),
+                    const SizedBox(height: 14),
+                    _SourceCard(
+                      color: cardColor,
+                      labelColor: titleColor,
+                      iconColor: accent,
+                      icon: Icons.featured_play_list_outlined,
+                      customIcon: _M3uMark(color: accent),
+                      label: 'M3U',
+                      onTap: () async {
+                        await Navigator.push(
+                          context,
+                          MaterialPageRoute(builder: (context) => const M3uAddScreen()),
+                        );
+                        await _loadPlaylists();
+                      },
+                    ),
+                    const Spacer(flex: 2),
+                  ],
+                ),
               ),
             ],
           ),
@@ -257,13 +322,111 @@ class _SourceScreenState extends State<SourceScreen> {
   }
 }
 
+class _RoundControl extends StatelessWidget {
+  final Color color;
+  final Widget child;
+  final double radius;
+  final EdgeInsetsGeometry padding;
+
+  const _RoundControl({
+    required this.color,
+    required this.child,
+    this.radius = 16,
+    this.padding = const EdgeInsets.symmetric(horizontal: 4),
+  });
+
+  @override
+  Widget build(BuildContext context) {
+    return Material(
+      color: color,
+      borderRadius: BorderRadius.all(Radius.circular(radius)),
+      clipBehavior: Clip.antiAlias,
+      child: Padding(
+        padding: padding,
+        child: child,
+      ),
+    );
+  }
+}
+
+class _M3uMark extends StatelessWidget {
+  final Color color;
+  final double size;
+
+  const _M3uMark({required this.color, this.size = 30});
+
+  @override
+  Widget build(BuildContext context) {
+    return SizedBox(
+      width: size,
+      height: size,
+      child: CustomPaint(painter: _M3uMarkPainter(color)),
+    );
+  }
+}
+
+class _M3uMarkPainter extends CustomPainter {
+  final Color color;
+
+  const _M3uMarkPainter(this.color);
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final stroke = Paint()
+      ..color = color
+      ..style = PaintingStyle.stroke
+      ..strokeWidth = size.width * 0.07
+      ..strokeCap = StrokeCap.round
+      ..strokeJoin = StrokeJoin.round;
+    final fill = Paint()
+      ..color = color
+      ..style = PaintingStyle.fill;
+
+    final card = RRect.fromRectAndRadius(
+      Rect.fromLTWH(
+        size.width * 0.06,
+        size.height * 0.14,
+        size.width * 0.7,
+        size.height * 0.72,
+      ),
+      Radius.circular(size.width * 0.12),
+    );
+    canvas.drawRRect(card, stroke);
+
+    final lineLeft = size.width * 0.2;
+    final lineRight = size.width * 0.48;
+    for (var i = 0; i < 3; i++) {
+      final y = size.height * (0.34 + i * 0.16);
+      canvas.drawLine(Offset(lineLeft, y), Offset(lineRight, y), stroke);
+    }
+
+    final play = Path()
+      ..moveTo(size.width * 0.64, size.height * 0.34)
+      ..lineTo(size.width * 0.64, size.height * 0.66)
+      ..lineTo(size.width * 0.9, size.height * 0.5)
+      ..close();
+    canvas.drawPath(play, fill);
+  }
+
+  @override
+  bool shouldRepaint(covariant _M3uMarkPainter oldDelegate) => oldDelegate.color != color;
+}
+
 class _SourceCard extends StatelessWidget {
+  final Color color;
+  final Color labelColor;
+  final Color iconColor;
   final IconData icon;
+  final Widget? customIcon;
   final String label;
   final VoidCallback? onTap;
 
   const _SourceCard({
+    required this.color,
+    required this.labelColor,
+    required this.iconColor,
     required this.icon,
+    this.customIcon,
     required this.label,
     required this.onTap,
   });
@@ -271,23 +434,23 @@ class _SourceCard extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     return Material(
-      color: Colors.grey[900],
-      borderRadius: const BorderRadius.all(Radius.circular(10)),
+      color: color,
+      borderRadius: const BorderRadius.all(Radius.circular(18)),
       child: InkWell(
         onTap: onTap,
-        borderRadius: const BorderRadius.all(Radius.circular(10)),
+        borderRadius: const BorderRadius.all(Radius.circular(18)),
         child: SizedBox(
           height: 92,
           width: double.infinity,
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              Icon(icon, size: 30, color: Colors.blue),
+              customIcon ?? Icon(icon, size: 30, color: iconColor),
               const SizedBox(height: 8),
               Text(
                 label,
-                style: const TextStyle(
-                  color: Colors.white,
+                style: TextStyle(
+                  color: labelColor,
                   fontSize: 15,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 1.1,

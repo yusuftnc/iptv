@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/saved_playlist.dart';
+import '../services/app_settings.dart';
 import '../services/cloud_sync_service.dart';
 import '../services/iptv_service.dart';
 import '../services/m3u_parser.dart';
@@ -123,28 +124,28 @@ class _SplashScreenState extends State<SplashScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: context.palette.background,
       body: Center(
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            const Icon(
+            Icon(
               Icons.tv,
               size: 100,
-              color: Colors.blue,
+              color: context.accent,
             ),
             const SizedBox(height: 20),
-            const Text(
+            Text(
               'SUTU Player',
               style: TextStyle(
-                color: Colors.white,
+                color: context.palette.text,
                 fontSize: 24,
                 fontWeight: FontWeight.bold,
               ),
             ),
             const SizedBox(height: 30),
-            const CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+            CircularProgressIndicator(
+              valueColor: AlwaysStoppedAnimation<Color>(context.accent),
             ),
           ],
         ),

@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:sutu_player/utils/logger.dart';
 import '../models/content_item.dart';
+import '../services/app_settings.dart';
 import '../services/iptv_service.dart';
 import '../services/cloud_sync_service.dart';
 import '../services/storage_service.dart';
@@ -228,12 +229,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         }
       },
       child: Scaffold(
-        backgroundColor: Colors.black,
+        backgroundColor: context.palette.background,
         appBar: AppBar(
           title: Text(_selectedCategoryName.isNotEmpty
               ? _selectedCategoryName
               : _getAppBarTitle()),
-          backgroundColor: Colors.blue,
+          backgroundColor: context.accent,
           leading: _selectedCategoryName.isNotEmpty
               ? IconButton(
                   icon: const Icon(Icons.arrow_back),
@@ -270,13 +271,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
         drawer: Drawer(
           child: Container(
-            color: Colors.grey.shade900,
+            color: context.palette.card,
             child: ListView(
               padding: EdgeInsets.zero,
               children: [
                 DrawerHeader(
-                  decoration: const BoxDecoration(
-                    color: Colors.blue,
+                  decoration: BoxDecoration(
+                    color: context.accent,
                   ),
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
@@ -291,7 +292,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       const SizedBox(height: 10),
                       Text(
                         'Kullanıcı: ${_iptvService.getUsername() ?? ''}',
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Colors.white,
                           fontSize: 16,
                         ),
@@ -300,26 +301,26 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ),
                 ),
                 ListTile(
-                  title: const Text(
+                  title: Text(
                     'Anasayfa',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(color: context.palette.text),
                   ),
-                  leading: const Icon(
+                  leading: Icon(
                     Icons.home,
-                    color: Colors.white,
+                    color: context.palette.text,
                   ),
                   onTap: () {
                     Navigator.pop(context);
                   },
                 ),
                 ListTile(
-                  title: const Text(
+                  title: Text(
                     'Favoriler',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(color: context.palette.text),
                   ),
-                  leading: const Icon(
+                  leading: Icon(
                     Icons.favorite,
-                    color: Colors.white,
+                    color: context.palette.text,
                   ),
                   onTap: () {
                     Navigator.pop(context);
@@ -332,13 +333,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   },
                 ),
                 ListTile(
-                  title: const Text(
+                  title: Text(
                     'İzleme Geçmişi',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(color: context.palette.text),
                   ),
-                  leading: const Icon(
+                  leading: Icon(
                     Icons.history,
-                    color: Colors.white,
+                    color: context.palette.text,
                   ),
                   onTap: () {
                     Navigator.pop(context);
@@ -352,13 +353,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
                 // Yenile
                 ListTile(
-                  title: const Text(
+                  title: Text(
                     'Yenile',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(color: context.palette.text),
                   ),
-                  leading: const Icon(
+                  leading: Icon(
                     Icons.refresh,
-                    color: Colors.white,
+                    color: context.palette.text,
                   ),
                   onTap: () {
                     Navigator.pop(context);
@@ -367,13 +368,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 ),
                 const Divider(color: Colors.grey),
                 ListTile(
-                  title: const Text(
+                  title: Text(
                     'Çıkış Yap',
-                    style: TextStyle(color: Colors.white),
+                    style: TextStyle(color: context.palette.text),
                   ),
-                  leading: const Icon(
+                  leading: Icon(
                     Icons.logout,
-                    color: Colors.white,
+                    color: context.palette.text,
                   ),
                   onTap: () {
                     Navigator.pop(context);
@@ -397,8 +398,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             _loadContent();
           },
           type: BottomNavigationBarType.fixed,
-          backgroundColor: Colors.black,
-          selectedItemColor: Colors.blue,
+          backgroundColor: context.palette.background,
+          selectedItemColor: context.accent,
           unselectedItemColor: Colors.grey,
           items: const [
             BottomNavigationBarItem(
@@ -425,9 +426,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
+      return Center(
         child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+          valueColor: AlwaysStoppedAnimation<Color>(context.accent),
         ),
       );
     }
@@ -445,14 +446,14 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             const SizedBox(height: 16),
             Text(
               _errorMessage,
-              style: const TextStyle(color: Colors.white),
+              style: TextStyle(color: context.palette.text),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: _loadContent,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
+                backgroundColor: context.accent,
               ),
               child: const Text('Tekrar Dene'),
             ),
@@ -477,10 +478,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       case 3: // Diziler
         return _buildCategoryList();
       default:
-        return const Center(
+        return Center(
           child: Text(
             'Bilinmeyen sekme',
-            style: TextStyle(color: Colors.white),
+            style: TextStyle(color: context.palette.text),
           ),
         );
     }
@@ -490,10 +491,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     if (_latestMovies.isEmpty &&
         _latestSeries.isEmpty &&
         _latestChannels.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           'Yeni içerik bulunamadı',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: context.palette.text),
         ),
       );
     }
@@ -542,11 +543,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         return ListTile(
           leading: Icon(
             _getCategoryIcon(category['category_name']),
-            color: Colors.white,
+            color: context.palette.text,
           ),
           title: Text(
             category['category_name'] ?? 'Unknown',
-            style: const TextStyle(color: Colors.white),
+            style: TextStyle(color: context.palette.text),
           ),
           onTap: () {
             setState(() {
@@ -570,10 +571,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   Widget _buildCategoryContent() {
     if (_selectedCategoryContent.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           'Bu kategoride içerik bulunamadı',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: context.palette.text),
         ),
       );
     }
@@ -685,11 +686,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       maxHeightDiskCache: 450,
                       maxWidthDiskCache: 300,
                       placeholder: (context, url) => Container(
-                        color: Colors.grey[900],
+                        color: context.palette.card,
                         child: const Center(child: CircularProgressIndicator()),
                       ),
                       errorWidget: (context, url, error) => Container(
-                        color: Colors.grey[900],
+                        color: context.palette.card,
                         child: Icon(
                           _currentContentType == 'live'
                               ? Icons.tv
@@ -697,13 +698,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                   ? Icons.movie
                                   : Icons.video_library,
                           size: 30,
-                          color: Colors.white,
+                          color: context.palette.text,
                         ),
                       ),
                     )
                   else
                     Container(
-                      color: Colors.grey[900],
+                      color: context.palette.card,
                       child: Icon(
                         _currentContentType == 'live'
                             ? Icons.tv
@@ -711,7 +712,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                                 ? Icons.movie
                                 : Icons.video_library,
                         size: 30,
-                        color: Colors.white,
+                        color: context.palette.text,
                       ),
                     ),
                   Positioned(
@@ -723,7 +724,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       color: Colors.black54,
                       child: Text(
                         contentItem.name,
-                        style: const TextStyle(
+                        style: TextStyle(
                           color: Colors.white,
                           fontSize: 12,
                         ),
@@ -878,8 +879,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.palette.text,
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
@@ -888,12 +889,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: Colors.blue,
+              color: context.accent,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
               count.toString(),
-              style: const TextStyle(
+              style: TextStyle(
                 color: Colors.white,
                 fontSize: 12,
               ),
@@ -928,25 +929,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   placeholder: (context, url) => Container(
                     width: 40,
                     height: 40,
-                    color: Colors.grey[800],
-                    child: const Icon(Icons.tv, color: Colors.white, size: 20),
+                    color: context.palette.placeholder,
+                    child: Icon(Icons.tv, color: context.palette.text, size: 20),
                   ),
                   errorWidget: (context, url, error) => Container(
                     width: 40,
                     height: 40,
-                    color: Colors.grey[800],
-                    child: const Icon(Icons.tv, color: Colors.white, size: 20),
+                    color: context.palette.placeholder,
+                    child: Icon(Icons.tv, color: context.palette.text, size: 20),
                   ),
                 )
               : Container(
                   width: 40,
                   height: 40,
-                  color: Colors.grey[800],
-                  child: const Icon(Icons.tv, color: Colors.white, size: 20),
+                  color: context.palette.placeholder,
+                  child: Icon(Icons.tv, color: context.palette.text, size: 20),
                 ),
           title: Text(
             channel['name'] ?? 'İsimsiz Kanal',
-            style: const TextStyle(color: Colors.white),
+            style: TextStyle(color: context.palette.text),
           ),
           subtitle: channel['category_name'] != null
               ? Text(
@@ -991,7 +992,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
         return Card(
           clipBehavior: Clip.antiAlias,
-          color: Colors.grey[900],
+          color: context.palette.card,
           child: InkWell(
             onTap: () => _openContent(ContentItem.fromJson(item, contentType)),
             child: Stack(
@@ -1004,10 +1005,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     placeholder: (context, url) =>
                         const Center(child: CircularProgressIndicator()),
                     errorWidget: (context, url, error) =>
-                        Container(color: Colors.grey[800], child: iconWidget),
+                        Container(color: context.palette.placeholder, child: iconWidget),
                   )
                 else
-                  Container(color: Colors.grey[800], child: iconWidget),
+                  Container(color: context.palette.placeholder, child: iconWidget),
                 Positioned(
                   bottom: 0,
                   left: 0,
@@ -1017,7 +1018,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     color: Colors.black54,
                     child: Text(
                       name,
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      style: TextStyle(color: Colors.white, fontSize: 12),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -1126,11 +1127,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     final iconUrl =
         item.streamType == 'series' ? item.streamIcon : item.streamIcon;
     final iconWidget = item.streamType == 'movie'
-        ? const Icon(Icons.movie, color: Colors.white, size: 30)
-        : const Icon(Icons.video_library, color: Colors.white, size: 30);
+        ? Icon(Icons.movie, color: context.palette.text, size: 30)
+        : Icon(Icons.video_library, color: context.palette.text, size: 30);
     return Card(
       clipBehavior: Clip.antiAlias,
-      color: Colors.grey[900],
+      color: context.palette.card,
       child: InkWell(
         onTap: () => _openContent(item),
         child: Stack(
@@ -1143,10 +1144,10 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 placeholder: (_, __) =>
                     const Center(child: CircularProgressIndicator()),
                 errorWidget: (_, __, ___) =>
-                    Container(color: Colors.grey[800], child: iconWidget),
+                    Container(color: context.palette.placeholder, child: iconWidget),
               )
             else
-              Container(color: Colors.grey[800], child: iconWidget),
+              Container(color: context.palette.placeholder, child: iconWidget),
           ],
         ),
       ),
@@ -1170,9 +1171,9 @@ class CategoryListItem extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     // Sabit değerler
-    const iconColor = Colors.blue;
-    const textColor = Colors.white;
-    const arrowColor = Colors.blue;
+    final iconColor = context.accent;
+    final textColor = context.palette.text;
+    final arrowColor = context.accent;
     const arrowSize = 16.0;
 
     // İçerik tipine göre ikon belirleme
@@ -1185,13 +1186,13 @@ class CategoryListItem extends StatelessWidget {
     return ListTile(
       title: Text(
         category['category_name'] ?? 'İsimsiz Kategori',
-        style: const TextStyle(color: textColor),
+        style: TextStyle(color: textColor),
       ),
       leading: Icon(
         categoryIcon,
         color: iconColor,
       ),
-      trailing: const Icon(
+      trailing: Icon(
         Icons.arrow_forward_ios,
         color: arrowColor,
         size: arrowSize,

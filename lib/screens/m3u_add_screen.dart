@@ -5,6 +5,7 @@ import 'package:file_picker/file_picker.dart';
 import 'package:flutter/material.dart';
 
 import '../models/saved_playlist.dart';
+import '../services/app_settings.dart';
 import '../services/m3u_parser.dart';
 import '../services/playlist_content.dart';
 import '../services/storage_service.dart';
@@ -80,7 +81,7 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
         final uri = Uri.tryParse(m3uUrl);
         final scheme = uri?.scheme.toLowerCase();
         if (uri == null || (scheme != 'http' && scheme != 'https') || uri.host.isEmpty) {
-          setState(() => _error = 'Geçerli bir liste adresi gir.');
+          setState(() => _error = AppText.get('listAddressInvalid'));
           return;
         }
         if (isDirectMediaUrl(m3uUrl) || await PlaylistContent.looksLikeMedia(m3uUrl)) {
@@ -95,13 +96,13 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
           m3uUrl: m3uUrl,
         ));
         if (!parsed.isValid) {
-          setState(() => _error = 'Geçersiz liste.');
+          setState(() => _error = AppText.get('invalidList'));
           return;
         }
         if (name.isEmpty) {
           setState(() {
             _askForName = true;
-            _error = 'Bu bir kanal listesi. Kaydetmek için playlist adı gir.';
+            _error = AppText.get('nameNeeded');
           });
           return;
         }
@@ -128,7 +129,7 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
       await _openParsed(playlist, parsed);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = _fromFile ? 'Dosya açılamadı.' : 'Liste alınamadı.');
+      setState(() => _error = AppText.get(_fromFile ? 'fileFailed' : 'listFailed'));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
@@ -197,11 +198,13 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
 
   @override
   Widget build(BuildContext context) {
+    AppSettingsScope.watch(context);
+    final p = context.palette;
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: p.background,
       appBar: AppBar(
         title: const Text('M3U'),
-        backgroundColor: Colors.blue,
+        backgroundColor: context.accent,
       ),
       body: ListView(
         padding: const EdgeInsets.all(16),
@@ -210,25 +213,25 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
           TextField(
             controller: _nameController,
             textCapitalization: TextCapitalization.sentences,
-            style: const TextStyle(color: Colors.white),
-            decoration: const InputDecoration(
-              labelText: 'Playlist adı',
+            style: TextStyle(color: p.text),
+            decoration: InputDecoration(
+              labelText: AppText.get('playlistName'),
               prefixIcon: Icon(Icons.bookmark_outline),
               border: OutlineInputBorder(
                 borderRadius: BorderRadius.all(Radius.circular(10)),
               ),
               filled: true,
-              fillColor: Colors.white10,
-              labelStyle: TextStyle(color: Colors.white70),
+              fillColor: p.field,
+              labelStyle: TextStyle(color: p.label),
             ),
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 16),
           ],
           SegmentedButton<bool>(
-            segments: const [
-              ButtonSegment(value: true, label: Text('Dosya'), icon: Icon(Icons.folder_open)),
-              ButtonSegment(value: false, label: Text('Adres'), icon: Icon(Icons.link)),
+            segments: [
+              ButtonSegment(value: true, label: Text(AppText.get('file')), icon: const Icon(Icons.folder_open)),
+              ButtonSegment(value: false, label: Text(AppText.get('address')), icon: const Icon(Icons.link)),
             ],
             selected: {_fromFile},
             onSelectionChanged: (value) {
@@ -244,25 +247,25 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
             OutlinedButton.icon(
               onPressed: _busy ? null : _pickFile,
               icon: const Icon(Icons.upload_file),
-              label: Text(_file?.name ?? 'Dosya seç'),
+              label: Text(_file?.name ?? AppText.get('pickFile')),
             )
           else
             TextField(
               controller: _urlController,
               keyboardType: TextInputType.url,
               autocorrect: false,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: 'Liste adresi',
+              style: TextStyle(color: p.text),
+              decoration: InputDecoration(
+                labelText: AppText.get('listAddress'),
                 hintText: 'https://sunucu/liste.m3u',
                 prefixIcon: Icon(Icons.link),
                 border: OutlineInputBorder(
                   borderRadius: BorderRadius.all(Radius.circular(10)),
                 ),
                 filled: true,
-                fillColor: Colors.white10,
-                labelStyle: TextStyle(color: Colors.white70),
-                hintStyle: TextStyle(color: Colors.white38),
+                fillColor: p.field,
+                labelStyle: TextStyle(color: p.label),
+                hintStyle: TextStyle(color: p.muted),
               ),
               onChanged: (_) => setState(() {}),
             ),
@@ -274,10 +277,10 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
           FilledButton(
             onPressed: _canSave ? _save : null,
             style: FilledButton.styleFrom(
-              backgroundColor: Colors.blue,
-              disabledBackgroundColor: Colors.white12,
+              backgroundColor: context.accent,
+              disabledBackgroundColor: p.disabledButton,
               foregroundColor: Colors.white,
-              disabledForegroundColor: Colors.white38,
+              disabledForegroundColor: p.disabledButtonText,
               padding: const EdgeInsets.symmetric(vertical: 16),
             ),
             child: _busy
@@ -286,7 +289,7 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
                     width: 22,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
-                : Text(_fromFile ? 'Ekle' : 'Aç', style: const TextStyle(fontSize: 16)),
+                : Text(AppText.get(_fromFile ? 'add' : 'open'), style: const TextStyle(fontSize: 16)),
           ),
         ],
       ),

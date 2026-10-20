@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import '../models/saved_playlist.dart';
+import '../services/app_settings.dart';
 import '../services/cloud_sync_service.dart';
 import '../services/iptv_service.dart';
 import '../services/storage_service.dart';
@@ -91,12 +92,12 @@ class _LoginScreenState extends State<LoginScreen> {
           }
         } else {
           setState(() {
-            _errorMessage = 'Giriş başarısız. Lütfen bilgilerinizi kontrol edin.';
+            _errorMessage = AppText.get('loginCheck');
           });
         }
       } catch (e) {
         setState(() {
-          _errorMessage = 'Bağlantı hatası: ${e.toString()}';
+          _errorMessage = '${AppText.get('connectionError')}: $e';
         });
       } finally {
         if (mounted) {
@@ -110,6 +111,8 @@ class _LoginScreenState extends State<LoginScreen> {
 
   @override
   Widget build(BuildContext context) {
+    AppSettingsScope.watch(context);
+    final p = context.palette;
     // Sabit değerler
     const double padding = 16.0;
     const double iconSize = 80;
@@ -120,10 +123,10 @@ class _LoginScreenState extends State<LoginScreen> {
     const double buttonFontSize = 16.0;
     
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: p.background,
       appBar: AppBar(
         title: const Text('Bağlantı'),
-        backgroundColor: Colors.blue,
+        backgroundColor: context.accent,
       ),
       body: Center(
         child: SingleChildScrollView(
@@ -134,29 +137,29 @@ class _LoginScreenState extends State<LoginScreen> {
               mainAxisAlignment: MainAxisAlignment.center,
               crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
-                const Icon(
+                Icon(
                   Icons.tv,
                   size: iconSize,
-                  color: Colors.blue,
+                  color: context.accent,
                 ),
                 const SizedBox(height: largeIconSpacing),
                 TextFormField(
                   controller: _nameController,
                   textCapitalization: TextCapitalization.sentences,
-                  decoration: const InputDecoration(
-                    labelText: 'Playlist adı',
+                  decoration: InputDecoration(
+                    labelText: AppText.get('playlistName'),
                     prefixIcon: Icon(Icons.bookmark_outline),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.all(Radius.circular(10)),
                     ),
                     filled: true,
-                    fillColor: Colors.white10,
-                    labelStyle: TextStyle(color: Colors.white70),
+                    fillColor: p.field,
+                    labelStyle: TextStyle(color: p.label),
                   ),
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: p.text),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
-                      return 'Lütfen playlist adını girin';
+                      return AppText.get('playlistNameRequired');
                     }
                     return null;
                   },
@@ -166,22 +169,22 @@ class _LoginScreenState extends State<LoginScreen> {
                   controller: _hostController,
                   keyboardType: TextInputType.url,
                   autocorrect: false,
-                  decoration: const InputDecoration(
-                    labelText: 'Sunucu Adresi',
+                  decoration: InputDecoration(
+                    labelText: AppText.get('server'),
                     hintText: 'http://sunucu:8080',
                     prefixIcon: Icon(Icons.dns),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.all(Radius.circular(10)),
                     ),
                     filled: true,
-                    fillColor: Colors.white10,
-                    labelStyle: TextStyle(color: Colors.white70),
-                    hintStyle: TextStyle(color: Colors.white38),
+                    fillColor: p.field,
+                    labelStyle: TextStyle(color: p.label),
+                    hintStyle: TextStyle(color: p.muted),
                   ),
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: p.text),
                   validator: (value) {
                     if (value == null || value.trim().isEmpty) {
-                      return 'Lütfen sunucu adresini girin';
+                      return AppText.get('serverRequired');
                     }
                     return null;
                   },
@@ -189,20 +192,20 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: verticalSpacing),
                 TextFormField(
                   controller: _usernameController,
-                  decoration: const InputDecoration(
-                    labelText: 'Kullanıcı Adı',
+                  decoration: InputDecoration(
+                    labelText: AppText.get('username'),
                     prefixIcon: Icon(Icons.person),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.all(Radius.circular(10)),
                     ),
                     filled: true,
-                    fillColor: Colors.white10,
-                    labelStyle: TextStyle(color: Colors.white70),
+                    fillColor: p.field,
+                    labelStyle: TextStyle(color: p.label),
                   ),
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: p.text),
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Lütfen kullanıcı adını girin';
+                      return AppText.get('usernameRequired');
                     }
                     return null;
                   },
@@ -210,21 +213,21 @@ class _LoginScreenState extends State<LoginScreen> {
                 const SizedBox(height: verticalSpacing),
                 TextFormField(
                   controller: _passwordController,
-                  decoration: const InputDecoration(
-                    labelText: 'Şifre',
+                  decoration: InputDecoration(
+                    labelText: AppText.get('password'),
                     prefixIcon: Icon(Icons.lock),
                     border: OutlineInputBorder(
                       borderRadius: BorderRadius.all(Radius.circular(10)),
                     ),
                     filled: true,
-                    fillColor: Colors.white10,
-                    labelStyle: TextStyle(color: Colors.white70),
+                    fillColor: p.field,
+                    labelStyle: TextStyle(color: p.label),
                   ),
-                  style: const TextStyle(color: Colors.white),
+                  style: TextStyle(color: p.text),
                   obscureText: true,
                   validator: (value) {
                     if (value == null || value.isEmpty) {
-                      return 'Lütfen şifrenizi girin';
+                      return AppText.get('passwordRequired');
                     }
                     return null;
                   },
@@ -245,13 +248,13 @@ class _LoginScreenState extends State<LoginScreen> {
                           if (states.contains(MaterialState.disabled)) {
                             return Colors.grey.withOpacity(.32);
                           }
-                          return Colors.blue;
+                          return context.accent;
                         },
                       ),
                     ),
-                    const Text(
-                      'Beni Hatırla',
-                      style: TextStyle(color: Colors.white),
+                    Text(
+                      AppText.get('remember'),
+                      style: TextStyle(color: p.text),
                     ),
                   ],
                 ),
@@ -268,15 +271,15 @@ class _LoginScreenState extends State<LoginScreen> {
                 ElevatedButton(
                   onPressed: _isLoading ? null : _login,
                   style: ElevatedButton.styleFrom(
-                    backgroundColor: Colors.blue,
+                    backgroundColor: context.accent,
                     padding: const EdgeInsets.symmetric(vertical: buttonVerticalPadding),
                   ),
                   child: _isLoading
                       ? const CircularProgressIndicator(
                           valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
                         )
-                      : const Text(
-                          'Giriş Yap',
+                      : Text(
+                          AppText.get('login'),
                           style: TextStyle(fontSize: buttonFontSize),
                         ),
                 ),

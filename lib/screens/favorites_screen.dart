@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import '../models/content_item.dart';
 import '../models/favorite_item.dart';
+import '../services/app_settings.dart';
 import '../services/cloud_sync_service.dart';
 import '../services/database_service.dart';
 import 'player_screen.dart';
@@ -160,10 +161,10 @@ class _FavoritesScreenState extends State<FavoritesScreen>
 
   Widget _buildContentGrid(List<FavoriteItem> items) {
     if (items.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           'Bu kategoride favori bulunmuyor',
-          style: TextStyle(color: Colors.white, fontSize: 16),
+          style: TextStyle(color: context.palette.text, fontSize: 16),
         ),
       );
     }
@@ -188,7 +189,7 @@ class _FavoritesScreenState extends State<FavoritesScreen>
           onTap: () => _playContent(item),
           child: Container(
             decoration: BoxDecoration(
-              color: Colors.grey[900],
+              color: context.palette.card,
               borderRadius: BorderRadius.circular(8),
             ),
             child: Column(
@@ -211,10 +212,10 @@ class _FavoritesScreenState extends State<FavoritesScreen>
                               size: 40,
                             ),
                           )
-                        : const Icon(
+                        : Icon(
                             Icons.video_library,
                             size: 40,
-                            color: Colors.white,
+                            color: context.palette.text,
                           ),
                   ),
                 ),
@@ -222,8 +223,8 @@ class _FavoritesScreenState extends State<FavoritesScreen>
                   padding: const EdgeInsets.all(8.0),
                   child: Text(
                     name,
-                    style: const TextStyle(
-                      color: Colors.white,
+                    style: TextStyle(
+                      color: context.palette.text,
                       fontSize: 12,
                     ),
                     maxLines: 2,
@@ -242,27 +243,27 @@ class _FavoritesScreenState extends State<FavoritesScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: context.palette.background,
       appBar: AppBar(
         title: const Text('Favoriler'),
-        backgroundColor: Colors.blue,
+        backgroundColor: context.accent,
       ),
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-              color: Colors.blue,
+              color: context.accent,
               onRefresh: () =>
                   _loadFavorites(fromCloud: true, showSpinner: false),
               child: _favorites.isEmpty
                   ? ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
-                      children: const [
+                      children: [
                         SizedBox(height: 160),
                         Center(
                           child: Text(
                             'Favorileriniz boş',
                             style:
-                                TextStyle(color: Colors.white, fontSize: 16),
+                                TextStyle(color: context.palette.text, fontSize: 16),
                           ),
                         ),
                       ],
@@ -273,12 +274,12 @@ class _FavoritesScreenState extends State<FavoritesScreen>
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
                       // TV Kanalları
-                      const Padding(
+                      Padding(
                         padding: EdgeInsets.all(16.0),
                         child: Text(
                           'TV Kanalları',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: context.palette.text,
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                           ),
@@ -287,12 +288,12 @@ class _FavoritesScreenState extends State<FavoritesScreen>
                       _buildContentGrid(_getFavoritesByType('live')),
 
                       // Filmler
-                      const Padding(
+                      Padding(
                         padding: EdgeInsets.all(16.0),
                         child: Text(
                           'Filmler',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: context.palette.text,
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                           ),
@@ -301,12 +302,12 @@ class _FavoritesScreenState extends State<FavoritesScreen>
                       _buildContentGrid(_getFavoritesByType('movie')),
 
                       // Diziler
-                      const Padding(
+                      Padding(
                         padding: EdgeInsets.all(16.0),
                         child: Text(
                           'Diziler',
                           style: TextStyle(
-                            color: Colors.white,
+                            color: context.palette.text,
                             fontSize: 20,
                             fontWeight: FontWeight.bold,
                           ),

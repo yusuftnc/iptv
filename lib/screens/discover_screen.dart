@@ -2,6 +2,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
 import '../models/discover_title.dart';
+import '../services/app_settings.dart';
 import '../services/discover_service.dart';
 import 'login_screen.dart';
 
@@ -72,10 +73,10 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: context.palette.background,
       appBar: AppBar(
         title: const Text('Keşfet'),
-        backgroundColor: Colors.blue,
+        backgroundColor: context.accent,
         actions: [
           IconButton(
             tooltip: 'Bağlantı',
@@ -96,7 +97,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                         Text(
                           _errorMessage,
                           textAlign: TextAlign.center,
-                          style: const TextStyle(color: Colors.white70),
+                          style: TextStyle(color: context.palette.muted),
                         ),
                         const SizedBox(height: 16),
                         TextButton(onPressed: _load, child: const Text('Tekrar dene')),
@@ -129,8 +130,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         children: [
           Text(
             title,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.palette.text,
               fontSize: 18,
               fontWeight: FontWeight.bold,
             ),
@@ -139,13 +140,13 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
           Container(
             padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
             decoration: BoxDecoration(
-              color: Colors.blue,
+              color: context.accent,
               borderRadius: BorderRadius.circular(12),
             ),
             child: Text(
               count.toString(),
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: context.palette.text,
                 fontSize: 12,
               ),
             ),
@@ -171,8 +172,8 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         final item = items[index];
         final poster = item.posterUrl;
         final iconWidget = item.isSeries
-            ? const Icon(Icons.video_library, size: 30, color: Colors.white)
-            : const Icon(Icons.movie, size: 30, color: Colors.white);
+            ? Icon(Icons.video_library, size: 30, color: context.palette.text)
+            : Icon(Icons.movie, size: 30, color: context.palette.text);
 
         return Card(
           clipBehavior: Clip.antiAlias,
@@ -202,7 +203,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     color: Colors.black54,
                     child: Text(
                       item.title,
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      style: TextStyle(color: context.palette.text, fontSize: 12),
                       maxLines: 2,
                       overflow: TextOverflow.ellipsis,
                     ),
@@ -231,10 +232,10 @@ class _DiscoverDetailsScreen extends StatelessWidget {
     final cover = title.posterUrl ?? '';
 
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: context.palette.background,
       appBar: AppBar(
         title: Text(title.title),
-        backgroundColor: Colors.blue,
+        backgroundColor: context.accent,
       ),
       body: SingleChildScrollView(
         child: Column(
@@ -260,7 +261,7 @@ class _DiscoverDetailsScreen extends StatelessWidget {
                       height: 250,
                       child: Icon(
                         title.isSeries ? Icons.video_library : Icons.movie,
-                        color: Colors.white54,
+                        color: context.palette.muted,
                         size: 50,
                       ),
                     ),
@@ -272,37 +273,37 @@ class _DiscoverDetailsScreen extends StatelessWidget {
                 children: [
                   Text(
                     title.title,
-                    style: const TextStyle(
+                    style: TextStyle(
                       fontSize: 24,
                       fontWeight: FontWeight.bold,
-                      color: Colors.white,
+                      color: context.palette.text,
                     ),
                   ),
                   const SizedBox(height: 8),
-                  _detailRow('Tür', title.isSeries ? 'Dizi' : 'Film'),
+                  _detailRow(context, 'Tür', title.isSeries ? 'Dizi' : 'Film'),
                   if (title.year != null) ...[
                     const SizedBox(height: 8),
-                    _detailRow('Yıl', title.year!),
+                    _detailRow(context, 'Yıl', title.year!),
                   ],
                   if (title.voteAverage > 0) ...[
                     const SizedBox(height: 8),
-                    _detailRow('Puan', title.voteAverage.toStringAsFixed(1)),
+                    _detailRow(context, 'Puan', title.voteAverage.toStringAsFixed(1)),
                   ],
                   if (title.overview.isNotEmpty) ...[
                     const SizedBox(height: 16),
-                    const Text(
+                    Text(
                       'Açıklama',
                       style: TextStyle(
                         fontSize: 18,
                         fontWeight: FontWeight.bold,
-                        color: Colors.white,
+                        color: context.palette.text,
                       ),
                     ),
                     const SizedBox(height: 8),
                     Text(
                       title.overview,
-                      style: const TextStyle(
-                        color: Colors.white,
+                      style: TextStyle(
+                        color: context.palette.text,
                         fontSize: 16,
                       ),
                     ),
@@ -311,7 +312,7 @@ class _DiscoverDetailsScreen extends StatelessWidget {
                   /*
                     const Text(
                     'Oynatma, bağlandığın sağlayıcının kataloğuna bağlı.',
-                    style: TextStyle(color: Colors.white54, fontSize: 13),
+                    style: TextStyle(color: context.palette.text54, fontSize: 13),
                   ),
                   */
                 ],
@@ -326,7 +327,7 @@ class _DiscoverDetailsScreen extends StatelessWidget {
           Navigator.pop(context);
           onConnect();
         },
-        backgroundColor: Colors.blue,
+        backgroundColor: context.accent,
         icon: const Icon(Icons.link),
         label: const Text('Sağlayıcıya bağlan'),
       ),
@@ -334,7 +335,7 @@ class _DiscoverDetailsScreen extends StatelessWidget {
     );
   }
 
-  Widget _detailRow(String label, String value) {
+  Widget _detailRow(BuildContext context, String label, String value) {
     return Row(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: [
@@ -351,8 +352,8 @@ class _DiscoverDetailsScreen extends StatelessWidget {
         Expanded(
           child: Text(
             value,
-            style: const TextStyle(
-              color: Colors.white,
+            style: TextStyle(
+              color: context.palette.text,
               fontSize: 16,
             ),
           ),

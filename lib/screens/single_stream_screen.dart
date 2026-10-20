@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../services/app_settings.dart';
 import 'player_screen.dart';
 
 class SingleStreamScreen extends StatefulWidget {
@@ -42,7 +43,7 @@ class _SingleStreamScreenState extends State<SingleStreamScreen> {
     final scheme = uri?.scheme.toLowerCase();
     final allowed = scheme == 'http' || scheme == 'https' || scheme == 'rtsp' || scheme == 'rtmp' || scheme == 'rtsps';
     if (uri == null || !uri.hasScheme || !allowed || uri.host.isEmpty) {
-      setState(() => _error = 'Geçerli bir yayın adresi gir.');
+      setState(() => _error = AppText.get('streamAddressInvalid'));
       return;
     }
 
@@ -63,11 +64,13 @@ class _SingleStreamScreenState extends State<SingleStreamScreen> {
 
   @override
   Widget build(BuildContext context) {
+    AppSettingsScope.watch(context);
+    final p = context.palette;
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: p.background,
       appBar: AppBar(
-        title: const Text('Tek yayın'),
-        backgroundColor: Colors.blue,
+        title: Text(AppText.get('singleStream')),
+        backgroundColor: context.accent,
       ),
       body: Padding(
         padding: const EdgeInsets.all(16),
@@ -78,16 +81,16 @@ class _SingleStreamScreenState extends State<SingleStreamScreen> {
               controller: _controller,
               keyboardType: TextInputType.url,
               autocorrect: false,
-              style: const TextStyle(color: Colors.white),
-              decoration: const InputDecoration(
-                labelText: 'Yayın adresi',
-                prefixIcon: Icon(Icons.link),
-                border: OutlineInputBorder(
+              style: TextStyle(color: p.text),
+              decoration: InputDecoration(
+                labelText: AppText.get('streamAddress'),
+                prefixIcon: const Icon(Icons.link),
+                border: const OutlineInputBorder(
                   borderRadius: BorderRadius.all(Radius.circular(10)),
                 ),
                 filled: true,
-                fillColor: Colors.white10,
-                labelStyle: TextStyle(color: Colors.white70),
+                fillColor: p.field,
+                labelStyle: TextStyle(color: p.label),
               ),
               onSubmitted: (_) => _play(),
             ),
@@ -99,13 +102,13 @@ class _SingleStreamScreenState extends State<SingleStreamScreen> {
             FilledButton(
               onPressed: _hasUrl ? _play : null,
               style: FilledButton.styleFrom(
-                backgroundColor: Colors.blue,
-                disabledBackgroundColor: Colors.white12,
+                backgroundColor: context.accent,
+                disabledBackgroundColor: p.disabledButton,
                 foregroundColor: Colors.white,
-                disabledForegroundColor: Colors.white38,
+                disabledForegroundColor: p.disabledButtonText,
                 padding: const EdgeInsets.symmetric(vertical: 16),
               ),
-              child: const Text('Oynat', style: TextStyle(fontSize: 16)),
+              child: Text(AppText.get('play'), style: const TextStyle(fontSize: 16)),
             ),
           ],
         ),

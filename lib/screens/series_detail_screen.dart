@@ -3,6 +3,7 @@ import 'package:cached_network_image/cached_network_image.dart';
 import '../models/content_item.dart';
 import '../models/playlist_episode.dart';
 import '../models/watch_history.dart';
+import '../services/app_settings.dart';
 import '../services/cloud_sync_service.dart';
 import '../services/iptv_service.dart';
 import '../services/database_service.dart';
@@ -311,15 +312,15 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: context.palette.background,
       appBar: AppBar(
         title: Text(_seriesTitleOnly),
-        backgroundColor: Colors.blue,
+        backgroundColor: context.accent,
         actions: [
           IconButton(
             icon: Icon(
               _isFavorite ? Icons.favorite : Icons.favorite_border,
-              color: _isFavorite ? Colors.red : Colors.white,
+              color: _isFavorite ? Colors.red : context.palette.text,
             ),
             onPressed: _toggleFavorite,
             tooltip: _isFavorite ? 'Favorilerden Çıkar' : 'Favorilere Ekle',
@@ -332,9 +333,9 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
 
   Widget _buildBody() {
     if (_isLoading) {
-      return const Center(
+      return Center(
         child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(Colors.blue),
+          valueColor: AlwaysStoppedAnimation<Color>(context.accent),
         ),
       );
     }
@@ -352,14 +353,14 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
             const SizedBox(height: 16),
             Text(
               _errorMessage,
-              style: const TextStyle(color: Colors.white),
+              style: TextStyle(color: context.palette.text),
               textAlign: TextAlign.center,
             ),
             const SizedBox(height: 24),
             ElevatedButton(
               onPressed: _loadSeriesDetails,
               style: ElevatedButton.styleFrom(
-                backgroundColor: Colors.blue,
+                backgroundColor: context.accent,
               ),
               child: const Text('Tekrar Dene'),
             ),
@@ -369,10 +370,10 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     }
 
     if (_seasons.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           'Bu dizi için bölüm bulunamadı',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: context.palette.text),
         ),
       );
     }
@@ -448,9 +449,9 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
                       width: 120,
                       height: 180,
                       color: Colors.grey[800],
-                      child: const Icon(
+                      child: Icon(
                         Icons.video_library,
-                        color: Colors.white,
+                        color: context.palette.text,
                         size: 40,
                       ),
                     ),
@@ -477,7 +478,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
                 const SizedBox(height: 4),
                 Text(
                   rating,
-                  style: const TextStyle(color: Colors.white, fontSize: 12),
+                  style: TextStyle(color: context.palette.text, fontSize: 12),
                 ),
               ],
               if (releaseDate.isNotEmpty) ...[
@@ -485,12 +486,12 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
                 Row(
                   mainAxisAlignment: MainAxisAlignment.center,
                   children: [
-                    const Icon(Icons.calendar_today,
-                        color: Colors.blue, size: 14),
+                    Icon(Icons.calendar_today,
+                        color: context.accent, size: 14),
                     const SizedBox(width: 4),
                     Text(
                       releaseDate,
-                      style: const TextStyle(color: Colors.white, fontSize: 12),
+                      style: TextStyle(color: context.palette.text, fontSize: 12),
                     ),
                   ],
                 ),
@@ -506,49 +507,49 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 if (plot.isNotEmpty) ...[
-                  const Text(
+                  Text(
                     'Özet',
                     style: TextStyle(
-                      color: Colors.blue,
+                      color: context.accent,
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
                     ),
                   ),
                   Text(
                     plot,
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: context.palette.text),
                     maxLines: 4,
                     overflow: TextOverflow.ellipsis,
                   ),
                   const SizedBox(height: 8),
                 ],
                 if (genre.isNotEmpty) ...[
-                  const Text(
+                  Text(
                     'Tür',
                     style: TextStyle(
-                      color: Colors.blue,
+                      color: context.accent,
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
                     ),
                   ),
                   Text(
                     genre,
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: context.palette.text),
                   ),
                   const SizedBox(height: 8),
                 ],
                 if (cast.isNotEmpty) ...[
-                  const Text(
+                  Text(
                     'Oyuncular',
                     style: TextStyle(
-                      color: Colors.blue,
+                      color: context.accent,
                       fontWeight: FontWeight.bold,
                       fontSize: 16,
                     ),
                   ),
                   Text(
                     cast,
-                    style: const TextStyle(color: Colors.white),
+                    style: TextStyle(color: context.palette.text),
                     maxLines: 2,
                     overflow: TextOverflow.ellipsis,
                   ),
@@ -580,7 +581,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
                 onPressed: _resumeLastEpisode,
                 style: ElevatedButton.styleFrom(
                   backgroundColor: Colors.green,
-                  foregroundColor: Colors.white,
+                  foregroundColor: context.palette.text,
                   shape: RoundedRectangleBorder(
                     borderRadius: BorderRadius.circular(8),
                   ),
@@ -602,8 +603,8 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
                 });
               },
               style: ElevatedButton.styleFrom(
-                backgroundColor: isSelected ? Colors.blue : Colors.grey[800],
-                foregroundColor: Colors.white,
+                backgroundColor: isSelected ? context.accent : Colors.grey[800],
+                foregroundColor: context.palette.text,
                 shape: RoundedRectangleBorder(
                   borderRadius: BorderRadius.circular(8),
                 ),
@@ -620,10 +621,10 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     final episodes = _episodesBySeason[_selectedSeason] ?? [];
 
     if (episodes.isEmpty) {
-      return const Center(
+      return Center(
         child: Text(
           'Bu sezon için bölüm bulunamadı',
-          style: TextStyle(color: Colors.white),
+          style: TextStyle(color: context.palette.text),
         ),
       );
     }
@@ -641,21 +642,21 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
         final duration = episode['duration'] ?? '';
 
         return Card(
-          color: Colors.grey[900],
+          color: context.palette.card,
           margin: EdgeInsets.zero,
           child: ListTile(
             contentPadding: const EdgeInsets.all(8),
             leading: CircleAvatar(
-              backgroundColor: Colors.blue,
+              backgroundColor: context.accent,
               child: Text(
                 episodeNum.toString(),
-                style: const TextStyle(color: Colors.white),
+                style: TextStyle(color: context.palette.text),
               ),
             ),
             title: Text(
               title,
-              style: const TextStyle(
-                color: Colors.white,
+              style: TextStyle(
+                color: context.palette.text,
                 fontWeight: FontWeight.bold,
               ),
             ),
@@ -681,8 +682,8 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
               ],
             ),
             trailing: IconButton(
-              icon: const Icon(Icons.play_circle_outline,
-                  color: Colors.blue, size: 36),
+              icon: Icon(Icons.play_circle_outline,
+                  color: context.accent, size: 36),
               onPressed: () => _playEpisode(episode),
             ),
             onTap: () => _playEpisode(episode),

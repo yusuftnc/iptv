@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../models/watch_history.dart';
 import '../models/content_item.dart';
+import '../services/app_settings.dart';
 import '../services/cloud_sync_service.dart';
 import '../services/database_service.dart';
 import 'player_screen.dart';
@@ -216,10 +217,10 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen>
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: context.palette.background,
       appBar: AppBar(
         title: const Text('İzleme Geçmişi'),
-        backgroundColor: Colors.blue,
+        backgroundColor: context.accent,
         actions: [
           IconButton(
             icon: const Icon(Icons.delete_forever),
@@ -231,19 +232,19 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen>
       body: _isLoading
           ? const Center(child: CircularProgressIndicator())
           : RefreshIndicator(
-              color: Colors.blue,
+              color: context.accent,
               onRefresh: () =>
                   _loadWatchHistory(fromCloud: true, showSpinner: false),
               child: _watchHistory.isEmpty
                   ? ListView(
                       physics: const AlwaysScrollableScrollPhysics(),
-                      children: const [
+                      children: [
                         SizedBox(height: 160),
                         Center(
                           child: Text(
                             'İzleme geçmişiniz boş',
                             style:
-                                TextStyle(color: Colors.white, fontSize: 16),
+                                TextStyle(color: context.palette.text, fontSize: 16),
                           ),
                         ),
                       ],
@@ -259,7 +260,7 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen>
                         color: Colors.red,
                         alignment: Alignment.centerRight,
                         padding: const EdgeInsets.only(right: 20),
-                        child: const Icon(Icons.delete, color: Colors.white),
+                        child: Icon(Icons.delete, color: context.palette.text),
                       ),
                       direction: DismissDirection.endToStart,
                       onDismissed: (direction) {
@@ -268,7 +269,7 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen>
                       child: InkWell(
                         onTap: () => _playContent(item),
                         child: Card(
-                          color: Colors.grey[900],
+                          color: context.palette.card,
                           margin: const EdgeInsets.symmetric(
                               vertical: 4, horizontal: 8),
                           child: ListTile(
@@ -302,12 +303,12 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen>
                                           : item.streamType == 'movie'
                                               ? Icons.movie
                                               : Icons.tv,
-                                      color: Colors.white,
+                                      color: context.palette.text,
                                     ),
                                   ),
                             title: Text(
                               item.name,
-                              style: const TextStyle(color: Colors.white),
+                              style: TextStyle(color: context.palette.text),
                             ),
                             subtitle: Column(
                               crossAxisAlignment: CrossAxisAlignment.start,
@@ -350,7 +351,7 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen>
                                   : item.streamType == 'movie'
                                       ? Icons.movie
                                       : Icons.tv,
-                              color: Colors.blue,
+                              color: context.accent,
                             ),
                           ),
                         ),

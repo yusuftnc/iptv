@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../services/app_settings.dart';
 import '../services/m3u_parser.dart';
 import 'player_screen.dart';
 import 'source_screen.dart';
@@ -20,11 +21,12 @@ class M3uListScreen extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final rows = _rows(entries);
+    final p = context.palette;
     return Scaffold(
-      backgroundColor: Colors.black,
+      backgroundColor: p.background,
       appBar: AppBar(
         title: Text(title),
-        backgroundColor: Colors.blue,
+        backgroundColor: context.accent,
         leading: backToSources
             ? IconButton(
                 icon: const Icon(Icons.arrow_back),
@@ -46,8 +48,8 @@ class M3uListScreen extends StatelessWidget {
               padding: const EdgeInsets.fromLTRB(16, 18, 16, 6),
               child: Text(
                 row.header!,
-                style: const TextStyle(
-                  color: Colors.white70,
+                style: TextStyle(
+                  color: p.muted,
                   fontSize: 13,
                   fontWeight: FontWeight.w700,
                   letterSpacing: 0.4,
@@ -62,7 +64,7 @@ class M3uListScreen extends StatelessWidget {
             horizontalTitleGap: 14,
             minLeadingWidth: 72,
             leading: _logo(entry.logo),
-            title: Text(entry.name, style: const TextStyle(color: Colors.white)),
+            title: Text(entry.name, style: TextStyle(color: p.text)),
             onTap: () {
               Navigator.push(
                 context,
