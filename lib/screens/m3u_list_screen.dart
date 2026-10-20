@@ -58,6 +58,9 @@ class M3uListScreen extends StatelessWidget {
 
           final entry = row.entry!;
           return ListTile(
+            contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 2),
+            horizontalTitleGap: 14,
+            minLeadingWidth: 72,
             leading: _logo(entry.logo),
             title: Text(entry.name, style: const TextStyle(color: Colors.white)),
             onTap: () {
@@ -82,24 +85,23 @@ class M3uListScreen extends StatelessWidget {
   }
 
   Widget _logo(String? url) {
-    if (url == null) {
-      return const CircleAvatar(
-        backgroundColor: Colors.white10,
-        child: Icon(Icons.live_tv, color: Colors.white70, size: 20),
-      );
-    }
-    return ClipRRect(
-      borderRadius: BorderRadius.circular(8),
-      child: CachedNetworkImage(
-        imageUrl: url,
-        width: 44,
-        height: 44,
-        fit: BoxFit.cover,
-        errorWidget: (context, url, error) => const CircleAvatar(
-          backgroundColor: Colors.white10,
-          child: Icon(Icons.live_tv, color: Colors.white70, size: 20),
-        ),
+    return Container(
+      width: 72,
+      height: 40,
+      alignment: Alignment.center,
+      padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 4),
+      decoration: BoxDecoration(
+        //color: Colors.white,
+        borderRadius: BorderRadius.circular(6),
       ),
+      child: url == null
+          ? const Icon(Icons.live_tv, color: Colors.black45, size: 20)
+          : CachedNetworkImage(
+              imageUrl: url,
+              fit: BoxFit.contain,
+              errorWidget: (context, url, error) =>
+                  const Icon(Icons.live_tv, color: Colors.black45, size: 20),
+            ),
     );
   }
 }
