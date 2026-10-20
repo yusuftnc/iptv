@@ -132,8 +132,11 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen>
     } else {
       final IptvService iptv = IptvService();
       String url = '';
-      // Canlı yayında kayıtlı URL token/süre sorunlarına düşebilir; her seferinde taze URL üret.
-      if (item.streamType != 'live' && (item.streamUrl ?? '').isNotEmpty) {
+      // M3U kanalının kimliği yayın adresinin kendisidir. Xtream canlı yayını
+      // gibi yeniden üretilirse oynatıcı sunucuda olmayan bir yola gider.
+      if (_isDirectStream(item.contentId)) {
+        url = item.contentId;
+      } else if (item.streamType != 'live' && (item.streamUrl ?? '').isNotEmpty) {
         url = item.streamUrl!;
       }
       if (url.isEmpty) {
@@ -156,6 +159,21 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen>
           ),
         ),
       ).then((_) => _loadWatchHistory(fromCloud: true, showSpinner: false));
+    }
+  }
+
+  bool _isDirectStream(String value) {
+    final uri = Uri.tryParse(value);
+    if (uri == null || !uri.hasScheme || uri.host.isEmpty) return false;
+    switch (uri.scheme.toLowerCase()) {
+      case 'http':
+      case 'https':
+      case 'rtsp':
+      case 'rtmp':
+      case 'rtsps':
+        return true;
+      default:
+        return false;
     }
   }
 

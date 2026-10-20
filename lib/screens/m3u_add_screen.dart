@@ -23,6 +23,7 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
   final _urlController = TextEditingController();
   bool _fromFile = true;
   bool _busy = false;
+  bool _askForName = false;
   String _error = '';
   PlatformFile? _file;
 
@@ -34,9 +35,13 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
   }
 
   bool get _canSave {
-    if (_busy || _nameController.text.trim().isEmpty) return false;
-    if (_fromFile) return _file != null;
-    return _urlController.text.trim().isNotEmpty;
+    if (_busy) return false;
+    if (_fromFile) {
+      return _nameController.text.trim().isNotEmpty && _file != null;
+    }
+    if (_urlController.text.trim().isEmpty) return false;
+    if (_askForName && _nameController.text.trim().isEmpty) return false;
+    return true;
   }
 
   Future<void> _pickFile() async {
@@ -78,15 +83,31 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
           setState(() => _error = 'Geçerli bir liste adresi gir.');
           return;
         }
+        if (isDirectMediaUrl(m3uUrl) || await PlaylistContent.looksLikeMedia(m3uUrl)) {
+          if (!mounted) return;
+          await _playDirect(m3uUrl);
+          return;
+        }
         parsed = await PlaylistContent.load(SavedPlaylist(
           id: id,
           name: name,
           kind: 'm3u',
           m3uUrl: m3uUrl,
         ));
+        if (!parsed.isValid) {
+          setState(() => _error = 'Geçersiz liste.');
+          return;
+        }
+        if (name.isEmpty) {
+          setState(() {
+            _askForName = true;
+            _error = 'Bu bir kanal listesi. Kaydetmek için playlist adı gir.';
+          });
+          return;
+        }
       }
 
-      if (!parsed.isValid) {
+      if (_fromFile && !parsed.isValid) {
         setState(() => _error = 'Geçersiz liste.');
         return;
       }
@@ -111,6 +132,22 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _playDirect(String url) async {
+    await Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => PlayerScreen(
+          contentId: url,
+          streamUrl: url,
+          contentType: 'movie',
+          name: 'Yayın',
+          historyId: url,
+          allowFavorite: false,
+        ),
+      ),
+    );
   }
 
   Future<void> _openParsed(SavedPlaylist playlist, M3uParseResult parsed) async {
@@ -169,6 +206,7 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
       body: ListView(
         padding: const EdgeInsets.all(16),
         children: [
+          if (_fromFile || _askForName) ...[
           TextField(
             controller: _nameController,
             textCapitalization: TextCapitalization.sentences,
@@ -186,6 +224,7 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
             onChanged: (_) => setState(() {}),
           ),
           const SizedBox(height: 16),
+          ],
           SegmentedButton<bool>(
             segments: const [
               ButtonSegment(value: true, label: Text('Dosya'), icon: Icon(Icons.folder_open)),
@@ -196,6 +235,7 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
               setState(() {
                 _fromFile = value.first;
                 _error = '';
+                if (_fromFile) _askForName = false;
               });
             },
           ),
@@ -246,7 +286,7 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
                     width: 22,
                     child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
                   )
-                : const Text('Ekle', style: TextStyle(fontSize: 16)),
+                : Text(_fromFile ? 'Ekle' : 'Aç', style: const TextStyle(fontSize: 16)),
           ),
         ],
       ),

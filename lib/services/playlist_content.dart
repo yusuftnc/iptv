@@ -35,6 +35,18 @@ class PlaylistContent {
     }
   }
 
+  static Future<bool> looksLikeMedia(String url) async {
+    try {
+      final response = await http
+          .head(Uri.parse(url), headers: const {'User-Agent': 'SUTU Player'})
+          .timeout(const Duration(seconds: 15));
+      final type = (response.headers['content-type'] ?? '').toLowerCase();
+      return type.startsWith('video/') || type.startsWith('audio/');
+    } catch (_) {
+      return false;
+    }
+  }
+
   static Future<String> _download(String url) async {
     final response = await http
         .get(

@@ -62,6 +62,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
   final StorageService _storageService = StorageService();
   bool _isFavorite = false;
 
+  /// TV yansıtma şimdilik kapalı.
+  static const bool _showCastButton = false;
+
   // Kontrol paneli için değişkenler
   bool _showControls = true;
   Timer? _hideControlsTimer;
@@ -2182,20 +2185,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 ],
               ),
             ),
-            PopupMenuItem(
-              value: 'cast',
-              child: Row(
-                children: [
-                  Icon(
-                    _isCasting ? Icons.cast_connected : Icons.cast,
-                    size: 20,
-                    color: _isCasting ? Colors.blue : null,
-                  ),
-                  const SizedBox(width: 10),
-                  Text(_isCasting ? 'Yansıtmayı Durdur' : 'TV’ye Yansıt'),
-                ],
+            if (_showCastButton)
+              PopupMenuItem(
+                value: 'cast',
+                child: Row(
+                  children: [
+                    Icon(
+                      _isCasting ? Icons.cast_connected : Icons.cast,
+                      size: 20,
+                      color: _isCasting ? Colors.blue : null,
+                    ),
+                    const SizedBox(width: 10),
+                    Text(_isCasting ? 'Yansıtmayı Durdur' : 'TV’ye Yansıt'),
+                  ],
+                ),
               ),
-            ),
             PopupMenuItem(
               value: 'fullscreen',
               child: Row(
@@ -2263,20 +2267,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
               onPressed: widget.allowFavorite ? _toggleFavorite : null,
             ),
-            IconButton(
-              icon: Icon(
-                _isCasting ? Icons.cast_connected : Icons.cast,
-                color: _isCasting ? Colors.blue : Colors.white,
+            if (_showCastButton)
+              IconButton(
+                icon: Icon(
+                  _isCasting ? Icons.cast_connected : Icons.cast,
+                  color: _isCasting ? Colors.blue : Colors.white,
+                ),
+                tooltip: _isCasting ? 'Yansıtmayı Durdur' : 'TV’ye Yansıt',
+                onPressed: () {
+                  if (_isCasting) {
+                    _stopCasting();
+                  } else {
+                    _castToDevice();
+                  }
+                },
               ),
-              tooltip: _isCasting ? 'Yansıtmayı Durdur' : 'TV’ye Yansıt',
-              onPressed: () {
-                if (_isCasting) {
-                  _stopCasting();
-                } else {
-                  _castToDevice();
-                }
-              },
-            ),
             // Altyazı butonu (dinamik liste)
             IconButton(
               icon: const Icon(Icons.subtitles, color: Colors.white),

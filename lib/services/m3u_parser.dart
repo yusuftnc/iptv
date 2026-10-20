@@ -78,6 +78,32 @@ M3uParseResult parseM3u(String raw) {
   return M3uParseResult(entries: entries, isHls: isHls, isValid: isValid);
 }
 
+bool isDirectMediaUrl(String url) {
+  final uri = Uri.tryParse(url.trim());
+  if (uri == null || !uri.hasScheme || uri.host.isEmpty) return false;
+  final path = uri.path.toLowerCase();
+  const extensions = [
+    '.mp4',
+    '.m4v',
+    '.mkv',
+    '.avi',
+    '.mov',
+    '.webm',
+    '.ts',
+    '.flv',
+    '.wmv',
+    '.mpg',
+    '.mpeg',
+    '.3gp',
+    '.mp3',
+    '.aac',
+    '.m4a',
+    '.flac',
+    '.wav',
+  ];
+  return extensions.any(path.endsWith);
+}
+
 String? _emptyToNull(String? value) {
   if (value == null || value.trim().isEmpty) return null;
   return value.trim();

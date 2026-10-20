@@ -47,6 +47,16 @@ seg0.ts
     expect(result.entries, isEmpty);
   });
 
+  test('video dosyası adresi liste değildir', () {
+    expect(
+      isDirectMediaUrl(
+        'https://media.geeksforgeeks.org/wp-content/uploads/20210314115545/sample-video.mp4',
+      ),
+      isTrue,
+    );
+    expect(isDirectMediaUrl('https://sunucu/liste.m3u'), isFalse);
+  });
+
   test('başlığı olup kanalı olmayan dosyayı geçersiz sayar', () {
     final result = parseM3u('#EXTM3U\n');
 
