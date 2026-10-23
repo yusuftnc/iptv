@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import 'package:sutu_player/utils/logger.dart';
 import '../models/content_item.dart';
+import '../models/live_channel.dart';
 import '../models/playlist_episode.dart';
 import '../services/app_settings.dart';
 import '../services/iptv_service.dart';
@@ -28,6 +29,8 @@ class PlayerScreen extends StatefulWidget {
   final String historyId;
   final List<PlaylistEpisode>? playlist;
   final int? playlistIndex;
+  final List<LiveChannel>? channels;
+  final int? channelIndex;
 
   /// Önceki bölümden geçişte yatay kilit durumunu koru.
   final bool lockLandscape;
@@ -45,6 +48,8 @@ class PlayerScreen extends StatefulWidget {
     required this.historyId,
     this.playlist,
     this.playlistIndex,
+    this.channels,
+    this.channelIndex,
     this.lockLandscape = false,
     this.allowFavorite = true,
   }) : super(key: key);
@@ -106,6 +111,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   List<PlaylistEpisode>? _playlist;
   int? _playlistIndex;
+  List<LiveChannel>? _channels;
+  int? _channelIndex;
   bool _handledEpisodeEnd = false;
   bool _showNextEpisodeCta = false;
   bool _autoPlayNext = true;
@@ -135,6 +142,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _playlist != null &&
       _playlistIndex != null &&
       _playlistIndex! < _playlist!.length - 1;
+
+  bool get _hasChannelList =>
+      widget.contentType == 'live' && _channels != null && _channels!.isNotEmpty;
+
+  bool get _hasPreviousChannel =>
+      _hasChannelList && _channelIndex != null && _channelIndex! > 0;
+
+  bool get _hasNextChannel =>
+      _hasChannelList &&
+      _channelIndex != null &&
+      _channelIndex! < _channels!.length - 1;
 
   bool get _isRemotePlaying =>
       _googleCastControls
@@ -177,6 +195,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _historyId = widget.historyId;
     _playlist = widget.playlist;
     _playlistIndex = widget.playlistIndex;
+    _channels = widget.channels;
+    _channelIndex = widget.channelIndex;
     _isFullScreen = widget.lockLandscape;
 
     _applyPlayerOrientations();
@@ -1274,6 +1294,56 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
+  Future<void> _zapChannel(int delta) async {
+    if (!_hasChannelList || _channelIndex == null) return;
+    final nextIndex = _channelIndex! + delta;
+    if (nextIndex < 0 || nextIndex >= _channels!.length) return;
+    if (!mounted) return;
+
+    final next = _channels![nextIndex];
+    var url = next.streamUrl;
+    if (url.isEmpty) {
+      try {
+        url = await _iptvService.getStreamUrl(
+              streamId: next.id,
+              streamType: 'live',
+            ) ??
+            '';
+      } catch (_) {
+        url = '';
+      }
+    }
+    if (!mounted) return;
+    if (url.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Kanal açılamadı')),
+      );
+      return;
+    }
+
+    _navigatingToEpisode = true;
+    Navigator.of(context).pushReplacement(
+      PageRouteBuilder(
+        pageBuilder: (context, animation, secondaryAnimation) => PlayerScreen(
+          contentId: next.id,
+          historyId: next.historyId,
+          streamUrl: url,
+          contentType: 'live',
+          name: next.name,
+          streamIcon: next.icon,
+          channels: _channels,
+          channelIndex: nextIndex,
+          lockLandscape: _isFullScreen,
+          allowFavorite: widget.allowFavorite,
+        ),
+        transitionsBuilder: (context, animation, secondaryAnimation, child) {
+          return FadeTransition(opacity: animation, child: child);
+        },
+        transitionDuration: const Duration(milliseconds: 150),
+      ),
+    );
+  }
+
   Future<void> _waitForPopupToClose() async {
     await WidgetsBinding.instance.endOfFrame;
     for (var i = 0; i < 24; i++) {
@@ -1958,7 +2028,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   mainAxisAlignment: MainAxisAlignment.center,
                   mainAxisSize: MainAxisSize.min,
                   children: [
-                    if (_playlist != null && _playlistIndex != null) ...[
+                    if (!_hasChannelList &&
+                        _playlist != null &&
+                        _playlistIndex != null) ...[
                       IconButton(
                         iconSize: iconSize,
                         icon: Icon(
@@ -1974,11 +2046,26 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       ),
                       const SizedBox(width: spacing / 2),
                     ],
-                    IconButton(
-                      iconSize: iconSize,
-                      icon: const Icon(Icons.replay_10, color: Colors.white),
-                      onPressed: _seekBackward,
-                    ),
+                    if (_hasChannelList) ...[
+                      IconButton(
+                        iconSize: iconSize,
+                        icon: Icon(
+                          Icons.skip_previous,
+                          color: _hasPreviousChannel
+                              ? Colors.white
+                              : Colors.white38,
+                        ),
+                        onPressed: _hasPreviousChannel
+                            ? () => _zapChannel(-1)
+                            : null,
+                        tooltip: 'Önceki kanal',
+                      ),
+                    ] else
+                      IconButton(
+                        iconSize: iconSize,
+                        icon: const Icon(Icons.replay_10, color: Colors.white),
+                        onPressed: _seekBackward,
+                      ),
                     const SizedBox(width: spacing),
                     IconButton(
                       iconSize: playIconSize,
@@ -1995,12 +2082,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
                       onPressed: _togglePlayPause,
                     ),
                     const SizedBox(width: spacing),
-                    IconButton(
-                      iconSize: iconSize,
-                      icon: const Icon(Icons.forward_10, color: Colors.white),
-                      onPressed: _seekForward,
-                    ),
-                    if (_hasNextEpisode) ...[
+                    if (_hasChannelList)
+                      IconButton(
+                        iconSize: iconSize,
+                        icon: Icon(
+                          Icons.skip_next,
+                          color:
+                              _hasNextChannel ? Colors.white : Colors.white38,
+                        ),
+                        onPressed:
+                            _hasNextChannel ? () => _zapChannel(1) : null,
+                        tooltip: 'Sonraki kanal',
+                      )
+                    else
+                      IconButton(
+                        iconSize: iconSize,
+                        icon: const Icon(Icons.forward_10, color: Colors.white),
+                        onPressed: _seekForward,
+                      ),
+                    if (!_hasChannelList && _hasNextEpisode) ...[
                       const SizedBox(width: spacing / 2),
                       IconButton(
                         iconSize: iconSize,

@@ -1,6 +1,7 @@
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:flutter/material.dart';
 
+import '../models/live_channel.dart';
 import '../services/app_settings.dart';
 import '../services/m3u_parser.dart';
 import 'player_screen.dart';
@@ -66,6 +67,16 @@ class M3uListScreen extends StatelessWidget {
             leading: _logo(entry.logo),
             title: Text(entry.name, style: TextStyle(color: p.text)),
             onTap: () {
+              final channels = [
+                for (final item in entries)
+                  LiveChannel(
+                    id: item.url,
+                    name: item.name,
+                    streamUrl: item.url,
+                    icon: item.logo,
+                    historyId: item.url,
+                  ),
+              ];
               Navigator.push(
                 context,
                 MaterialPageRoute(
@@ -76,6 +87,8 @@ class M3uListScreen extends StatelessWidget {
                     name: entry.name,
                     streamIcon: entry.logo,
                     historyId: entry.url,
+                    channels: channels,
+                    channelIndex: entries.indexOf(entry),
                   ),
                 ),
               );

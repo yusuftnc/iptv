@@ -5,6 +5,7 @@ import 'package:flutter/services.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:sutu_player/utils/logger.dart';
 import '../models/content_item.dart';
+import '../models/live_channel.dart';
 import '../services/app_settings.dart';
 import '../services/iptv_service.dart';
 import '../services/cloud_sync_service.dart';
@@ -637,6 +638,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   Log.d("DBG", 'Debug - Stream URL: $streamUrl');
 
                   if (streamUrl != null && mounted) {
+                    final liveChannels = _currentContentType == 'live'
+                        ? [
+                            for (final raw in _selectedCategoryContent)
+                              LiveChannel.xtream(raw),
+                          ]
+                        : null;
                     _playContent(
                       contentId,
                       streamUrl,
@@ -644,6 +651,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       contentItem.name,
                       contentItem.streamIcon ?? '',
                       contentId,
+                      channels: liveChannels,
+                      channelIndex: _currentContentType == 'live' ? index : null,
                     );
                   } else if (mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
@@ -748,7 +757,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
       String contentType,
       String name,
       String streamIcon,
-      String historyId) async {
+      String historyId,
+      {List<LiveChannel>? channels, int? channelIndex}) async {
     try {
       if (contentType == 'movie') {
         final movieDetails = await _iptvService.getMovieInfo(contentId);
@@ -776,6 +786,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               name: name,
               streamIcon: streamIcon,
               historyId: historyId,
+              channels: channels,
+              channelIndex: channelIndex,
             ),
           ),
         ).then((_) => _reloadContinueWatching());
@@ -955,7 +967,13 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   style: TextStyle(color: Colors.grey[400]),
                 )
               : null,
-          onTap: () => _openContent(ContentItem.fromJson(channel, 'live')),
+          onTap: () => _openContent(
+            ContentItem.fromJson(channel, 'live'),
+            channels: [
+              for (final item in channels) LiveChannel.xtream(item),
+            ],
+            channelIndex: index,
+          ),
         );
       },
     );
@@ -1032,7 +1050,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     );
   }
 
-  Future<void> _openContent(ContentItem contentItem) async {
+  Future<void> _openContent(
+    ContentItem contentItem, {
+    List<LiveChannel>? channels,
+    int? channelIndex,
+  }) async {
     try {
       final type = contentItem.streamType ?? 'live';
 
@@ -1081,6 +1103,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
               name: contentItem.name,
               streamIcon: contentItem.streamIcon,
               historyId: contentItem.historyId,
+              channels: channels,
+              channelIndex: channelIndex,
             ),
           ),
         ).then((_) => _reloadContinueWatching());

@@ -9,29 +9,28 @@ import 'm3u_parser.dart';
 
 class PlaylistContent {
   static Future<M3uParseResult> load(SavedPlaylist playlist) async {
-    final text = playlist.isRemoteM3u
-        ? await _download(playlist.m3uUrl)
-        : await _readFile(playlist.m3uPath);
-    return parseM3u(text);
+    if (playlist.isRemoteM3u) {
+      return parseM3u(await _download(playlist.m3uUrl));
+    }
+    return parseM3u(await _readLocal(playlist));
   }
 
   static Future<String> copyPickedFile({
     required String playlistId,
     required List<int> bytes,
   }) async {
-    final dir = await getApplicationDocumentsDirectory();
-    final folder = Directory('${dir.path}/playlists');
-    await folder.create(recursive: true);
-    final file = File('${folder.path}/$playlistId.m3u');
+    final file = File('${(await _documents()).path}/playlists/$playlistId.m3u');
+    await file.parent.create(recursive: true);
     await file.writeAsBytes(bytes, flush: true);
     return file.path;
   }
 
   static Future<void> deleteLocalFile(SavedPlaylist playlist) async {
-    if (playlist.m3uPath.isEmpty) return;
-    final file = File(playlist.m3uPath);
-    if (await file.exists()) {
-      await file.delete();
+    for (final path in await _candidatePaths(playlist)) {
+      final file = File(path);
+      if (await file.exists()) {
+        await file.delete();
+      }
     }
   }
 
@@ -47,6 +46,49 @@ class PlaylistContent {
     }
   }
 
+  static Future<Directory> _documents() => getApplicationDocumentsDirectory();
+
+  static Future<String> _readLocal(SavedPlaylist playlist) async {
+    Object? lastError;
+    for (final path in await _candidatePaths(playlist)) {
+      try {
+        final file = File(path);
+        if (!await file.exists()) continue;
+        final bytes = await file.readAsBytes();
+        try {
+          return utf8.decode(bytes);
+        } on FormatException {
+          return latin1.decode(bytes);
+        }
+      } catch (e) {
+        lastError = e;
+      }
+    }
+    throw lastError ?? StateError('Liste dosyası yok');
+  }
+
+  /// Kayıtlı tam yol, uygulama kabı değişince bozulur.
+  /// Dosya adı ve playlist kimliğiyle güncel Documents klasöründe de aranır.
+  static Future<List<String>> _candidatePaths(SavedPlaylist playlist) async {
+    final paths = <String>[];
+    final raw = playlist.m3uPath.trim();
+    if (raw.startsWith('file://')) {
+      paths.add(Uri.parse(raw).toFilePath());
+    } else if (raw.isNotEmpty && !raw.contains('://')) {
+      paths.add(raw);
+    }
+
+    final dir = await _documents();
+    if (playlist.id.isNotEmpty) {
+      paths.add('${dir.path}/playlists/${playlist.id}.m3u');
+    }
+    final name = raw.split('/').where((part) => part.isNotEmpty).lastOrNull;
+    if (name != null && name.isNotEmpty) {
+      paths.add('${dir.path}/playlists/$name');
+    }
+    return paths.toSet().toList();
+  }
+
   static Future<String> _download(String url) async {
     final response = await http
         .get(
@@ -58,14 +100,5 @@ class PlaylistContent {
       throw StateError('Liste alınamadı (${response.statusCode})');
     }
     return response.body;
-  }
-
-  static Future<String> _readFile(String path) async {
-    final bytes = await File(path).readAsBytes();
-    try {
-      return utf8.decode(bytes);
-    } on FormatException {
-      return latin1.decode(bytes);
-    }
   }
 }

@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:cached_network_image/cached_network_image.dart';
 import 'package:sutu_player/utils/logger.dart';
 import '../models/content_item.dart';
+import '../models/live_channel.dart';
 import '../services/app_settings.dart';
 import '../services/iptv_service.dart';
 import '../services/storage_service.dart';
@@ -115,7 +116,11 @@ class _SearchScreenState extends State<SearchScreen> {
     await _loadSearchHistory();
   }
 
-  Future<void> _playContent(ContentItem contentItem) async {
+  Future<void> _playContent(
+    ContentItem contentItem, {
+    List<LiveChannel>? channels,
+    int? channelIndex,
+  }) async {
     try {
       final type = contentItem.streamType ?? 'live';
 
@@ -172,6 +177,8 @@ class _SearchScreenState extends State<SearchScreen> {
               name: contentItem.name,
               streamIcon: contentItem.streamIcon,
               historyId: contentItem.id,
+              channels: channels,
+              channelIndex: channelIndex,
             ),
           ),
         );
@@ -654,7 +661,13 @@ class _SearchScreenState extends State<SearchScreen> {
                   style: TextStyle(color: Colors.grey[400]),
                 )
               : null,
-          onTap: () => _playContent(ContentItem.fromJson(channel, 'live')),
+          onTap: () => _playContent(
+            ContentItem.fromJson(channel, 'live'),
+            channels: [
+              for (final item in channels) LiveChannel.xtream(item),
+            ],
+            channelIndex: index,
+          ),
         );
       },
     );
