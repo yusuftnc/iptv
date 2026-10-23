@@ -72,12 +72,14 @@ class _SingleStreamScreenState extends State<SingleStreamScreen> {
         title: Text(AppText.get('singleStream')),
         backgroundColor: context.accent,
       ),
-      body: Padding(
-        padding: const EdgeInsets.all(16),
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 36, 16, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-            TextField(
+            Icon(Icons.play_circle_outline, size: 80, color: context.accent),
+            const SizedBox(height: 30),
+              TextField(
               controller: _controller,
               keyboardType: TextInputType.url,
               autocorrect: false,
@@ -101,18 +103,12 @@ class _SingleStreamScreenState extends State<SingleStreamScreen> {
             const SizedBox(height: 24),
             FilledButton(
               onPressed: _hasUrl ? _play : null,
-              style: FilledButton.styleFrom(
-                backgroundColor: context.accent,
-                disabledBackgroundColor: p.disabledButton,
-                foregroundColor: Colors.white,
-                disabledForegroundColor: p.disabledButtonText,
-                padding: const EdgeInsets.symmetric(vertical: 16),
-              ),
+              style: context.primaryButtonStyle,
               child: Text(AppText.get('play'), style: const TextStyle(fontSize: 16)),
             ),
-          ],
+            ],
+          ),
         ),
-      ),
     );
   }
 }

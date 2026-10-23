@@ -206,9 +206,13 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
         title: const Text('M3U'),
         backgroundColor: context.accent,
       ),
-      body: ListView(
-        padding: const EdgeInsets.all(16),
-        children: [
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(16, 36, 16, 24),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+          Icon(Icons.featured_play_list_outlined, size: 80, color: context.accent),
+          const SizedBox(height: 30),
           if (_fromFile || _askForName) ...[
           TextField(
             controller: _nameController,
@@ -276,13 +280,7 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
           const SizedBox(height: 24),
           FilledButton(
             onPressed: _canSave ? _save : null,
-            style: FilledButton.styleFrom(
-              backgroundColor: context.accent,
-              disabledBackgroundColor: p.disabledButton,
-              foregroundColor: Colors.white,
-              disabledForegroundColor: p.disabledButtonText,
-              padding: const EdgeInsets.symmetric(vertical: 16),
-            ),
+            style: context.primaryButtonStyle,
             child: _busy
                 ? const SizedBox(
                     height: 22,
@@ -291,8 +289,9 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
                   )
                 : Text(AppText.get(_fromFile ? 'add' : 'open'), style: const TextStyle(fontSize: 16)),
           ),
-        ],
-      ),
+            ],
+          ),
+        ),
     );
   }
 }

@@ -21,7 +21,30 @@ class _LoginScreenState extends State<LoginScreen> {
   final _passwordController = TextEditingController();
   bool _isLoading = false;
   bool _rememberMe = true;
+  bool _canSubmit = false;
   String _errorMessage = '';
+
+  @override
+  void initState() {
+    super.initState();
+    for (final controller in [
+      _nameController,
+      _hostController,
+      _usernameController,
+      _passwordController,
+    ]) {
+      controller.addListener(_refreshSubmit);
+    }
+  }
+
+  void _refreshSubmit() {
+    final ready = _nameController.text.trim().isNotEmpty &&
+        _hostController.text.trim().isNotEmpty &&
+        _usernameController.text.trim().isNotEmpty &&
+        _passwordController.text.trim().isNotEmpty;
+    if (ready == _canSubmit) return;
+    setState(() => _canSubmit = ready);
+  }
 
   @override
   void dispose() {
@@ -128,10 +151,9 @@ class _LoginScreenState extends State<LoginScreen> {
         title: const Text('Bağlantı'),
         backgroundColor: context.accent,
       ),
-      body: Center(
-        child: SingleChildScrollView(
-          padding: const EdgeInsets.all(padding),
-          child: Form(
+      body: SingleChildScrollView(
+        padding: const EdgeInsets.fromLTRB(padding, 36, padding, 24),
+        child: Form(
             key: _formKey,
             child: Column(
               mainAxisAlignment: MainAxisAlignment.center,
@@ -268,26 +290,27 @@ class _LoginScreenState extends State<LoginScreen> {
                       textAlign: TextAlign.center,
                     ),
                   ),
-                ElevatedButton(
-                  onPressed: _isLoading ? null : _login,
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: context.accent,
-                    padding: const EdgeInsets.symmetric(vertical: buttonVerticalPadding),
-                  ),
+                FilledButton(
+                  onPressed: _isLoading || !_canSubmit ? null : _login,
+                  style: context.primaryButtonStyle,
                   child: _isLoading
-                      ? const CircularProgressIndicator(
-                          valueColor: AlwaysStoppedAnimation<Color>(Colors.white),
+                      ? const SizedBox(
+                          height: 22,
+                          width: 22,
+                          child: CircularProgressIndicator(
+                            strokeWidth: 2,
+                            color: Colors.white,
+                          ),
                         )
                       : Text(
                           AppText.get('login'),
-                          style: TextStyle(fontSize: buttonFontSize),
+                          style: const TextStyle(fontSize: buttonFontSize),
                         ),
                 ),
               ],
             ),
           ),
         ),
-      ),
     );
   }
 }

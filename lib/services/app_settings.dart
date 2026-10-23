@@ -8,6 +8,17 @@ extension AppAccent on BuildContext {
       ? Colors.blue
       : Colors.blue.shade700;
 
+  ButtonStyle get primaryButtonStyle {
+    final p = palette;
+    return FilledButton.styleFrom(
+      backgroundColor: accent,
+      foregroundColor: Colors.white,
+      disabledBackgroundColor: p.disabledButton,
+      disabledForegroundColor: p.disabledButtonText,
+      padding: const EdgeInsets.symmetric(vertical: 16),
+    );
+  }
+
   AppPalette get palette => AppPalette.of(this);
 }
 
@@ -114,6 +125,7 @@ class AppText {
 
   static const _tr = {
     'sourceTitle': 'Kaynak seç',
+    'saved': 'Kayıtlı',
     'singleStream': 'TEK YAYIN',
     'delete': 'Sil',
     'deletePlaylistTitle': 'Playlist silinsin mi?',
@@ -149,6 +161,7 @@ class AppText {
 
   static const _en = {
     'sourceTitle': 'Choose source',
+    'saved': 'Saved',
     'singleStream': 'SINGLE STREAM',
     'delete': 'Delete',
     'deletePlaylistTitle': 'Delete this playlist?',

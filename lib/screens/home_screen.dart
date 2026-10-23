@@ -270,7 +270,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ],
         ),
         drawer: Drawer(
-          child: Container(
+          child: Material(
             color: context.palette.card,
             child: ListView(
               padding: EdgeInsets.zero,
