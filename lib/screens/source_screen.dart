@@ -155,8 +155,11 @@ class _SourceScreenState extends State<SourceScreen> {
   }
 
   Future<void> _openAdd(Widget page, {bool reload = false}) async {
+    dismissKeyboard();
     await Navigator.push(context, MaterialPageRoute(builder: (context) => page));
-    if (reload && mounted) await _loadPlaylists();
+    if (!mounted) return;
+    dismissKeyboard();
+    if (reload) await _loadPlaylists();
   }
 
   Future<void> _showAddSheet() async {
@@ -165,6 +168,7 @@ class _SourceScreenState extends State<SourceScreen> {
     final cardColor = dark ? const Color(0xFF1C1C1E) : const Color(0xFFF2F2F7);
     final titleColor = dark ? Colors.white : Colors.black87;
     final sheetColor = dark ? Colors.black : Colors.white;
+    dismissKeyboard();
     await showModalBottomSheet<void>(
       context: context,
       backgroundColor: sheetColor,

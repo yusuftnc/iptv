@@ -46,6 +46,7 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
   }
 
   Future<void> _pickFile() async {
+    dismissKeyboard();
     final result = await FilePicker.pickFiles(
       dialogTitle: 'M3U dosyası seç',
       type: FileType.custom,
@@ -60,6 +61,7 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
 
   Future<void> _save() async {
     if (!_canSave) return;
+    dismissKeyboard();
     setState(() {
       _busy = true;
       _error = '';
@@ -136,6 +138,7 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
   }
 
   Future<void> _playDirect(String url) async {
+    dismissKeyboard();
     await Navigator.push(
       context,
       MaterialPageRoute(
@@ -152,6 +155,7 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
   }
 
   Future<void> _openParsed(SavedPlaylist playlist, M3uParseResult parsed) async {
+    dismissKeyboard();
     if (parsed.isHls) {
       final uri = playlist.m3uPath.isNotEmpty
           ? Uri.file(playlist.m3uPath).toString()
@@ -205,6 +209,13 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
       appBar: AppBar(
         title: const Text('M3U'),
         backgroundColor: context.accent,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            dismissKeyboard();
+            Navigator.pop(context);
+          },
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 36, 16, 24),

@@ -1,6 +1,12 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import 'database_service.dart';
+
+void dismissKeyboard() {
+  FocusManager.instance.primaryFocus?.unfocus();
+  SystemChannels.textInput.invokeMethod<void>('TextInput.hide');
+}
 
 extension AppAccent on BuildContext {
   /// Aydınlık modda mavi bir ton koyu; karanlık modda mevcut mavi.

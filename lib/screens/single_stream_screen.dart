@@ -38,6 +38,7 @@ class _SingleStreamScreenState extends State<SingleStreamScreen> {
   }
 
   void _play() {
+    dismissKeyboard();
     final text = _controller.text.trim();
     final uri = Uri.tryParse(text);
     final scheme = uri?.scheme.toLowerCase();
@@ -71,6 +72,13 @@ class _SingleStreamScreenState extends State<SingleStreamScreen> {
       appBar: AppBar(
         title: Text(AppText.get('singleStream')),
         backgroundColor: context.accent,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            dismissKeyboard();
+            Navigator.pop(context);
+          },
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 36, 16, 24),

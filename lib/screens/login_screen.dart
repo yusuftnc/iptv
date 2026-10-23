@@ -56,6 +56,7 @@ class _LoginScreenState extends State<LoginScreen> {
   }
 
   Future<void> _login() async {
+    dismissKeyboard();
     if (_formKey.currentState!.validate()) {
       setState(() {
         _isLoading = true;
@@ -150,6 +151,13 @@ class _LoginScreenState extends State<LoginScreen> {
       appBar: AppBar(
         title: const Text('Bağlantı'),
         backgroundColor: context.accent,
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () {
+            dismissKeyboard();
+            Navigator.pop(context);
+          },
+        ),
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(padding, 36, padding, 24),
