@@ -11,6 +11,9 @@ import '../services/database_service.dart';
 import '../services/storage_service.dart';
 import '../services/cloud_sync_service.dart';
 import '../services/cast_service.dart';
+import '../services/ads_service.dart';
+import '../services/purchase_service.dart';
+import 'paywall_screen.dart';
 import 'package:flutter_chrome_cast/entities.dart';
 import 'package:flutter_chrome_cast/enums.dart';
 import '../widgets/cast_device_picker.dart';
@@ -38,6 +41,9 @@ class PlayerScreen extends StatefulWidget {
   /// Tek yayın adresinde katalog kaydı olmadığı için favori anlamsız.
   final bool allowFavorite;
 
+  /// Canlı kanal zap'ı. Aynı oturumda okla geçişte tam ekran reklam yok.
+  final bool skipPreRoll;
+
   const PlayerScreen({
     Key? key,
     required this.contentId,
@@ -52,6 +58,7 @@ class PlayerScreen extends StatefulWidget {
     this.channelIndex,
     this.lockLandscape = false,
     this.allowFavorite = true,
+    this.skipPreRoll = false,
   }) : super(key: key);
 
   @override
@@ -67,9 +74,6 @@ class _PlayerScreenState extends State<PlayerScreen> {
   final DatabaseService _databaseService = DatabaseService();
   final StorageService _storageService = StorageService();
   bool _isFavorite = false;
-
-  /// TV yansıtma şimdilik kapalı.
-  static const bool _showCastButton = false;
 
   // Kontrol paneli için değişkenler
   bool _showControls = true;
@@ -211,7 +215,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _loadTrackPreferences();
     _ensurePlaylist();
 
-    _checkWatchPosition().then((_) {
+    _checkWatchPosition().then((_) async {
+      if (!mounted) return;
+      if (!widget.skipPreRoll) await AdsService.showPreRoll();
+      if (!mounted) return;
       _initializePlayer();
       if (widget.allowFavorite) _checkIfFavorite();
       _startHideControlsTimer();
@@ -1335,6 +1342,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           channelIndex: nextIndex,
           lockLandscape: _isFullScreen,
           allowFavorite: widget.allowFavorite,
+          skipPreRoll: true,
         ),
         transitionsBuilder: (context, animation, secondaryAnimation, child) {
           return FadeTransition(opacity: animation, child: child);
@@ -1353,6 +1361,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
       await Future<void>.delayed(const Duration(milliseconds: 50));
     }
     await Future<void>.delayed(const Duration(milliseconds: 200));
+  }
+
+  Future<void> _onCastPressed() async {
+    if (_isCasting) {
+      await _stopCasting();
+      return;
+    }
+    if (!PurchaseService.instance.proFeatures) {
+      await Navigator.push<void>(
+        context,
+        MaterialPageRoute(builder: (context) => const PaywallScreen()),
+      );
+      if (!mounted || !PurchaseService.instance.proFeatures) return;
+    }
+    await _castToDevice();
   }
 
   Future<void> _castToDevice() async {
@@ -2286,21 +2309,20 @@ class _PlayerScreenState extends State<PlayerScreen> {
                 ],
               ),
             ),
-            if (_showCastButton)
-              PopupMenuItem(
-                value: 'cast',
-                child: Row(
-                  children: [
-                    Icon(
-                      _isCasting ? Icons.cast_connected : Icons.cast,
-                      size: 20,
-                      color: _isCasting ? context.accent : null,
-                    ),
-                    const SizedBox(width: 10),
-                    Text(_isCasting ? 'Yansıtmayı Durdur' : 'TV’ye Yansıt'),
-                  ],
-                ),
+            PopupMenuItem(
+              value: 'cast',
+              child: Row(
+                children: [
+                  Icon(
+                    _isCasting ? Icons.cast_connected : Icons.cast,
+                    size: 20,
+                    color: _isCasting ? context.accent : null,
+                  ),
+                  const SizedBox(width: 10),
+                  Text(_isCasting ? 'Yansıtmayı Durdur' : 'TV’ye Yansıt'),
+                ],
               ),
+            ),
             PopupMenuItem(
               value: 'fullscreen',
               child: Row(
@@ -2368,20 +2390,13 @@ class _PlayerScreenState extends State<PlayerScreen> {
               ),
               onPressed: widget.allowFavorite ? _toggleFavorite : null,
             ),
-            if (_showCastButton)
-              IconButton(
+            IconButton(
                 icon: Icon(
                   _isCasting ? Icons.cast_connected : Icons.cast,
                   color: _isCasting ? context.accent : Colors.white,
                 ),
                 tooltip: _isCasting ? 'Yansıtmayı Durdur' : 'TV’ye Yansıt',
-                onPressed: () {
-                  if (_isCasting) {
-                    _stopCasting();
-                  } else {
-                    _castToDevice();
-                  }
-                },
+                onPressed: _onCastPressed,
               ),
             // Altyazı butonu (dinamik liste)
             IconButton(
@@ -2445,11 +2460,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         _showSubtitlesDialog();
         break;
       case 'cast':
-        if (_isCasting) {
-          await _stopCasting();
-        } else {
-          await _castToDevice();
-        }
+        await _onCastPressed();
         break;
       case 'fullscreen':
         setState(() {

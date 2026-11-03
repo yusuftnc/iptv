@@ -16,6 +16,8 @@ import 'series_detail_screen.dart';
 import 'search_screen.dart';
 import 'favorites_screen.dart';
 import 'watch_history_screen.dart';
+import 'paywall_screen.dart';
+import '../widgets/banner_ad_slot.dart';
 import 'movie_details_screen.dart';
 import '../models/watch_history.dart';
 import '../services/database_service.dart';
@@ -352,7 +354,25 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     ).then((_) => _reloadContinueWatching());
                   },
                 ),
-                // Yenile
+                ListTile(
+                  title: Text(
+                    'Pro',
+                    style: TextStyle(color: context.palette.text),
+                  ),
+                  leading: Icon(
+                    Icons.workspace_premium_outlined,
+                    color: context.palette.text,
+                  ),
+                  onTap: () {
+                    Navigator.pop(context);
+                    Navigator.push(
+                      context,
+                      MaterialPageRoute(
+                        builder: (context) => const PaywallScreen(),
+                      ),
+                    );
+                  },
+                ),
                 ListTile(
                   title: Text(
                     'Yenile',
@@ -387,7 +407,11 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           ),
         ),
         body: _buildBody(),
-        bottomNavigationBar: BottomNavigationBar(
+        bottomNavigationBar: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            const BannerAdSlot(),
+            BottomNavigationBar(
           currentIndex: _currentIndex,
           onTap: (index) {
             setState(() {
@@ -418,6 +442,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
             BottomNavigationBarItem(
               icon: Icon(Icons.video_library),
               label: 'Diziler',
+            ),
+          ],
             ),
           ],
         ),

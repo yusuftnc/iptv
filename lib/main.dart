@@ -6,6 +6,8 @@ import 'models/favorite_item.dart';
 import 'models/watch_history.dart';
 import 'models/user_settings.dart';
 import 'services/app_settings.dart';
+import 'services/purchase_service.dart';
+import 'services/ads_service.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -29,6 +31,8 @@ void main() async {
   ]);
 
   await AppSettings.instance.load();
+  await PurchaseService.instance.start();
+  await AdsService.start();
   runApp(const MyApp());
 }
 

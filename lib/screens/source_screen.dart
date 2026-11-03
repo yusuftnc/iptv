@@ -8,6 +8,7 @@ import '../services/m3u_parser.dart';
 import '../services/playlist_content.dart';
 import '../services/storage_service.dart';
 import 'home_screen.dart';
+import 'paywall_screen.dart';
 import 'login_screen.dart';
 import 'm3u_add_screen.dart';
 import 'm3u_list_screen.dart';
@@ -293,6 +294,23 @@ class _SourceScreenState extends State<SourceScreen> {
                     ),
                   ),
                   const Spacer(),
+                  TextButton(
+                    onPressed: () {
+                      Navigator.push(
+                        context,
+                        MaterialPageRoute(
+                          builder: (context) => const PaywallScreen(),
+                        ),
+                      );
+                    },
+                    child: Text(
+                      'Pro',
+                      style: TextStyle(
+                        color: accent,
+                        fontWeight: FontWeight.w700,
+                      ),
+                    ),
+                  ),
                   _RoundControl(
                     color: cardColor,
                     padding: const EdgeInsets.only(left: 22, right: 8),
