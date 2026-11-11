@@ -8,6 +8,7 @@ import '../services/cloud_sync_service.dart';
 import '../services/iptv_service.dart';
 import '../services/database_service.dart';
 import 'player_screen.dart';
+import 'series_info_details_screen.dart';
 
 class SeriesDetailScreen extends StatefulWidget {
   final ContentItem seriesItem;
@@ -137,6 +138,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
       await _databaseService.addFavorite(widget.seriesItem);
     }
 
+    if (!mounted) return;
     setState(() {
       _isFavorite = !_isFavorite;
     });
@@ -177,6 +179,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
         }
       }
 
+      if (!mounted) return;
       setState(() {
         _seriesInfo = seriesInfo;
         _episodesBySeason = episodesBySeason;
@@ -185,6 +188,7 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted) return;
       setState(() {
         _errorMessage =
             'Dizi bilgileri yüklenirken hata oluştu: ${e.toString()}';
@@ -309,6 +313,49 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     return null;
   }
 
+  String _coverUrl() {
+    if (widget.seriesItem.streamIcon != null &&
+        widget.seriesItem.streamIcon!.isNotEmpty) {
+      return widget.seriesItem.streamIcon!;
+    }
+    final cover = _seriesInfo['cover']?.toString() ?? '';
+    return cover;
+  }
+
+  void _openSeriesInfoDetails() {
+    final plot =
+        '${_seriesInfo['plot'] ?? widget.seriesItem.description ?? ''}';
+    final cast = '${_seriesInfo['cast'] ?? ''}';
+    final director = '${_seriesInfo['director'] ?? ''}';
+    final genre = '${_seriesInfo['genre'] ?? ''}';
+    final releaseDate = '${_seriesInfo['releaseDate'] ?? ''}';
+    final rating = '${_seriesInfo['rating'] ?? ''}';
+    final canResume =
+        _resumeHistory != null && _hasMeaningfulResume(_resumeHistory!);
+
+    Navigator.push(
+      context,
+      MaterialPageRoute(
+        builder: (context) => SeriesInfoDetailsScreen(
+          seriesItem: widget.seriesItem,
+          title: _seriesTitleOnly,
+          coverUrl: _coverUrl(),
+          plot: plot,
+          cast: cast,
+          director: director,
+          genre: genre,
+          releaseDate: releaseDate,
+          rating: rating,
+          canResume: canResume,
+          onResume: canResume ? _resumeLastEpisode : null,
+        ),
+      ),
+    ).then((_) {
+      _checkIfFavorite(fromCloud: true);
+      _refreshResumeFromDb(fromCloud: true);
+    });
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -399,7 +446,6 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
     final plot =
         '${_seriesInfo['plot'] ?? widget.seriesItem.description ?? ''}';
     final cast = '${_seriesInfo['cast'] ?? ''}';
-    final director = '${_seriesInfo['director'] ?? ''}';
     final genre = '${_seriesInfo['genre'] ?? ''}';
     final releaseDate = '${_seriesInfo['releaseDate'] ?? ''}';
     final rating = '${_seriesInfo['rating'] ?? ''}';
@@ -414,151 +460,165 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
       }
     }
 
-    return Container(
-      padding: const EdgeInsets.all(16),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          // Poster, Yıldızlar ve Tarih
-          Column(
+    final coverUrl = _coverUrl();
+
+    // Devam Et / Sezon üstündeki tüm bilgi alanı tek tıkla tam detayı açar.
+    return Material(
+      color: Colors.transparent,
+      child: InkWell(
+        onTap: _openSeriesInfoDetails,
+        child: Container(
+          padding: const EdgeInsets.all(16),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              // Poster resmi: önce ContentItem.streamIcon, yoksa API'den gelen cover
-              if ((widget.seriesItem.streamIcon != null &&
-                      widget.seriesItem.streamIcon!.isNotEmpty) ||
-                  (_seriesInfo['cover'] != null &&
-                      _seriesInfo['cover'].toString().isNotEmpty))
-                ClipRRect(
-                  borderRadius: BorderRadius.circular(8),
-                  child: CachedNetworkImage(
-                    imageUrl: (widget.seriesItem.streamIcon != null &&
-                            widget.seriesItem.streamIcon!.isNotEmpty)
-                        ? widget.seriesItem.streamIcon!
-                        : _seriesInfo['cover'],
-                    width: 120,
-                    height: 180,
-                    fit: BoxFit.cover,
-                    placeholder: (context, url) => Container(
-                      width: 120,
-                      height: 180,
-                      color: Colors.grey[800],
-                      child: const Center(
-                        child: CircularProgressIndicator(),
+              // Poster, Yıldızlar ve Tarih
+              Column(
+                children: [
+                  if (coverUrl.isNotEmpty)
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: CachedNetworkImage(
+                        imageUrl: coverUrl,
+                        width: 120,
+                        height: 180,
+                        fit: BoxFit.cover,
+                        placeholder: (context, url) => Container(
+                          width: 120,
+                          height: 180,
+                          color: Colors.grey[800],
+                          child: const Center(
+                            child: CircularProgressIndicator(),
+                          ),
+                        ),
+                        errorWidget: (context, url, error) => Container(
+                          width: 120,
+                          height: 180,
+                          color: Colors.grey[800],
+                          child: Icon(
+                            Icons.video_library,
+                            color: context.palette.text,
+                            size: 40,
+                          ),
+                        ),
                       ),
                     ),
-                    errorWidget: (context, url, error) => Container(
-                      width: 120,
-                      height: 180,
-                      color: Colors.grey[800],
-                      child: Icon(
-                        Icons.video_library,
-                        color: context.palette.text,
-                        size: 40,
-                      ),
+                  if (rating.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: List.generate(5, (index) {
+                        if (index < ratingValue.floor()) {
+                          return const Icon(Icons.star,
+                              color: Colors.amber, size: 16);
+                        } else if (index == ratingValue.floor() &&
+                            ratingValue % 1 >= 0.5) {
+                          return const Icon(Icons.star_half,
+                              color: Colors.amber, size: 16);
+                        } else {
+                          return const Icon(Icons.star_border,
+                              color: Colors.amber, size: 16);
+                        }
+                      }),
                     ),
-                  ),
-                ),
-              if (rating.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: List.generate(5, (index) {
-                    if (index < ratingValue.floor()) {
-                      return const Icon(Icons.star,
-                          color: Colors.amber, size: 16);
-                    } else if (index == ratingValue.floor() &&
-                        ratingValue % 1 >= 0.5) {
-                      return const Icon(Icons.star_half,
-                          color: Colors.amber, size: 16);
-                    } else {
-                      return const Icon(Icons.star_border,
-                          color: Colors.amber, size: 16);
-                    }
-                  }),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  rating,
-                  style: TextStyle(color: context.palette.text, fontSize: 12),
-                ),
-              ],
-              if (releaseDate.isNotEmpty) ...[
-                const SizedBox(height: 8),
-                Row(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    Icon(Icons.calendar_today,
-                        color: context.accent, size: 14),
-                    const SizedBox(width: 4),
+                    const SizedBox(height: 4),
                     Text(
-                      releaseDate,
-                      style: TextStyle(color: context.palette.text, fontSize: 12),
+                      rating,
+                      style:
+                          TextStyle(color: context.palette.text, fontSize: 12),
                     ),
                   ],
+                  if (releaseDate.isNotEmpty) ...[
+                    const SizedBox(height: 8),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Icon(Icons.calendar_today,
+                            color: context.accent, size: 14),
+                        const SizedBox(width: 4),
+                        Text(
+                          releaseDate,
+                          style: TextStyle(
+                              color: context.palette.text, fontSize: 12),
+                        ),
+                      ],
+                    ),
+                  ],
+                ],
+              ),
+
+              const SizedBox(width: 16),
+
+              // Dizi bilgileri
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    if (plot.isNotEmpty) ...[
+                      Text(
+                        'Özet',
+                        style: TextStyle(
+                          color: context.accent,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        plot,
+                        style: TextStyle(color: context.palette.text),
+                        maxLines: 4,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    if (genre.isNotEmpty) ...[
+                      Row(
+                        children: [
+                          Text(
+                            'Tür',
+                            style: TextStyle(
+                              color: context.accent,
+                              fontWeight: FontWeight.bold,
+                              fontSize: 16,
+                            ),
+                          ),
+                          const Spacer(),
+                          const Icon(
+                            Icons.chevron_right,
+                            color: Colors.white,
+                            size: 20,
+                          ),
+                        ],
+                      ),
+                      Text(
+                        genre,
+                        style: TextStyle(color: context.palette.text),
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                    if (cast.isNotEmpty) ...[
+                      Text(
+                        'Oyuncular',
+                        style: TextStyle(
+                          color: context.accent,
+                          fontWeight: FontWeight.bold,
+                          fontSize: 16,
+                        ),
+                      ),
+                      Text(
+                        cast,
+                        style: TextStyle(color: context.palette.text),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                  ],
                 ),
-              ],
+              ),
             ],
           ),
-
-          const SizedBox(width: 16),
-
-          // Dizi bilgileri
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                if (plot.isNotEmpty) ...[
-                  Text(
-                    'Özet',
-                    style: TextStyle(
-                      color: context.accent,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  Text(
-                    plot,
-                    style: TextStyle(color: context.palette.text),
-                    maxLines: 4,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 8),
-                ],
-                if (genre.isNotEmpty) ...[
-                  Text(
-                    'Tür',
-                    style: TextStyle(
-                      color: context.accent,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  Text(
-                    genre,
-                    style: TextStyle(color: context.palette.text),
-                  ),
-                  const SizedBox(height: 8),
-                ],
-                if (cast.isNotEmpty) ...[
-                  Text(
-                    'Oyuncular',
-                    style: TextStyle(
-                      color: context.accent,
-                      fontWeight: FontWeight.bold,
-                      fontSize: 16,
-                    ),
-                  ),
-                  Text(
-                    cast,
-                    style: TextStyle(color: context.palette.text),
-                    maxLines: 2,
-                    overflow: TextOverflow.ellipsis,
-                  ),
-                  const SizedBox(height: 8),
-                ],
-              ],
-            ),
-          ),
-        ],
+        ),
       ),
     );
   }

@@ -13,7 +13,9 @@ import 'm3u_list_screen.dart';
 import 'player_screen.dart';
 
 class M3uAddScreen extends StatefulWidget {
-  const M3uAddScreen({super.key});
+  final SavedPlaylist? existing;
+
+  const M3uAddScreen({super.key, this.existing});
 
   @override
   State<M3uAddScreen> createState() => _M3uAddScreenState();
@@ -28,6 +30,23 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
   String _error = '';
   PlatformFile? _file;
 
+  bool get _isEditing => widget.existing != null;
+
+  @override
+  void initState() {
+    super.initState();
+    final existing = widget.existing;
+    if (existing != null) {
+      _nameController.text = existing.name;
+      if (existing.m3uUrl.isNotEmpty) {
+        _fromFile = false;
+        _urlController.text = existing.m3uUrl;
+      } else {
+        _fromFile = true;
+      }
+    }
+  }
+
   @override
   void dispose() {
     _nameController.dispose();
@@ -38,10 +57,16 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
   bool get _canSave {
     if (_busy) return false;
     if (_fromFile) {
-      return _nameController.text.trim().isNotEmpty && _file != null;
+      if (_nameController.text.trim().isEmpty) return false;
+      if (_isEditing && _file == null && (widget.existing?.m3uPath.isNotEmpty ?? false)) {
+        return true;
+      }
+      return _file != null;
     }
     if (_urlController.text.trim().isEmpty) return false;
-    if (_askForName && _nameController.text.trim().isEmpty) return false;
+    if ((_askForName || _isEditing) && _nameController.text.trim().isEmpty) {
+      return false;
+    }
     return true;
   }
 
@@ -67,26 +92,38 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
       _error = '';
     });
 
-    final id = DateTime.now().microsecondsSinceEpoch.toString();
+    final id = widget.existing?.id ??
+        DateTime.now().microsecondsSinceEpoch.toString();
     final name = _nameController.text.trim();
     try {
       final M3uParseResult parsed;
       String m3uUrl = '';
-      String m3uPath = '';
+      String m3uPath = widget.existing?.m3uPath ?? '';
       List<int>? fileBytes;
 
       if (_fromFile) {
-        fileBytes = await _fileBytes(_file!);
-        parsed = parseM3u(_decode(fileBytes));
+        if (_file != null) {
+          fileBytes = await _fileBytes(_file!);
+          parsed = parseM3u(_decode(fileBytes));
+        } else if (_isEditing && m3uPath.isNotEmpty) {
+          parsed = await PlaylistContent.load(widget.existing!);
+        } else {
+          setState(() => _error = AppText.get('fileFailed'));
+          return;
+        }
       } else {
         m3uUrl = _urlController.text.trim();
         final uri = Uri.tryParse(m3uUrl);
         final scheme = uri?.scheme.toLowerCase();
-        if (uri == null || (scheme != 'http' && scheme != 'https') || uri.host.isEmpty) {
+        if (uri == null ||
+            (scheme != 'http' && scheme != 'https') ||
+            uri.host.isEmpty) {
           setState(() => _error = AppText.get('listAddressInvalid'));
           return;
         }
-        if (isDirectMediaUrl(m3uUrl) || await PlaylistContent.looksLikeMedia(m3uUrl)) {
+        if (!_isEditing &&
+            (isDirectMediaUrl(m3uUrl) ||
+                await PlaylistContent.looksLikeMedia(m3uUrl))) {
           if (!mounted) return;
           await _playDirect(m3uUrl);
           return;
@@ -108,6 +145,7 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
           });
           return;
         }
+        m3uPath = '';
       }
 
       if (_fromFile && !parsed.isValid) {
@@ -116,7 +154,11 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
       }
 
       if (fileBytes != null) {
-        m3uPath = await PlaylistContent.copyPickedFile(playlistId: id, bytes: fileBytes);
+        if (widget.existing != null) {
+          await PlaylistContent.deleteLocalFile(widget.existing!);
+        }
+        m3uPath =
+            await PlaylistContent.copyPickedFile(playlistId: id, bytes: fileBytes);
       }
 
       final playlist = SavedPlaylist(
@@ -128,13 +170,45 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
       );
       await StorageService().savePlaylist(playlist);
       if (!mounted) return;
+      if (_isEditing) {
+        Navigator.pop(context, true);
+        return;
+      }
       await _openParsed(playlist, parsed);
     } catch (_) {
       if (!mounted) return;
-      setState(() => _error = AppText.get(_fromFile ? 'fileFailed' : 'listFailed'));
+      setState(
+          () => _error = AppText.get(_fromFile ? 'fileFailed' : 'listFailed'));
     } finally {
       if (mounted) setState(() => _busy = false);
     }
+  }
+
+  Future<void> _delete() async {
+    final existing = widget.existing;
+    if (existing == null) return;
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (context) => AlertDialog(
+        title: Text(AppText.get('deletePlaylistTitle')),
+        content: Text(existing.name),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(context, false),
+            child: Text(AppText.get('cancel')),
+          ),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: Text(AppText.get('delete')),
+          ),
+        ],
+      ),
+    );
+    if (confirmed != true || !mounted) return;
+    await PlaylistContent.deleteLocalFile(existing);
+    await StorageService().deletePlaylist(existing.id);
+    if (!mounted) return;
+    Navigator.pop(context, true);
   }
 
   Future<void> _playDirect(String url) async {
@@ -200,6 +274,14 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
     }
   }
 
+  String get _fileButtonLabel {
+    if (_file != null) return _file!.name;
+    if (_isEditing && (widget.existing?.m3uPath.isNotEmpty ?? false)) {
+      return AppText.get('keepCurrentFile');
+    }
+    return AppText.get('pickFile');
+  }
+
   @override
   Widget build(BuildContext context) {
     AppSettingsScope.watch(context);
@@ -207,7 +289,7 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
     return Scaffold(
       backgroundColor: p.background,
       appBar: AppBar(
-        title: const Text('M3U'),
+        title: Text(_isEditing ? AppText.get('editPlaylist') : 'M3U'),
         backgroundColor: context.accent,
         leading: IconButton(
           icon: const Icon(Icons.arrow_back),
@@ -216,93 +298,114 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
             Navigator.pop(context);
           },
         ),
+        actions: [
+          if (_isEditing)
+            IconButton(
+              tooltip: AppText.get('delete'),
+              onPressed: _busy ? null : _delete,
+              icon: const Icon(Icons.delete_outline),
+            ),
+        ],
       ),
       body: SingleChildScrollView(
         padding: const EdgeInsets.fromLTRB(16, 36, 16, 24),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.stretch,
           children: [
-          Icon(Icons.featured_play_list_outlined, size: 80, color: context.accent),
-          const SizedBox(height: 30),
-          if (_fromFile || _askForName) ...[
-          TextField(
-            controller: _nameController,
-            textCapitalization: TextCapitalization.sentences,
-            style: TextStyle(color: p.text),
-            decoration: InputDecoration(
-              labelText: AppText.get('playlistName'),
-              prefixIcon: Icon(Icons.bookmark_outline),
-              border: OutlineInputBorder(
-                borderRadius: BorderRadius.all(Radius.circular(10)),
-              ),
-              filled: true,
-              fillColor: p.field,
-              labelStyle: TextStyle(color: p.label),
-            ),
-            onChanged: (_) => setState(() {}),
-          ),
-          const SizedBox(height: 16),
-          ],
-          SegmentedButton<bool>(
-            segments: [
-              ButtonSegment(value: true, label: Text(AppText.get('file')), icon: const Icon(Icons.folder_open)),
-              ButtonSegment(value: false, label: Text(AppText.get('address')), icon: const Icon(Icons.link)),
-            ],
-            selected: {_fromFile},
-            onSelectionChanged: (value) {
-              setState(() {
-                _fromFile = value.first;
-                _error = '';
-                if (_fromFile) _askForName = false;
-              });
-            },
-          ),
-          const SizedBox(height: 16),
-          if (_fromFile)
-            OutlinedButton.icon(
-              onPressed: _busy ? null : _pickFile,
-              icon: const Icon(Icons.upload_file),
-              label: Text(_file?.name ?? AppText.get('pickFile')),
-            )
-          else
-            TextField(
-              controller: _urlController,
-              keyboardType: TextInputType.url,
-              autocorrect: false,
-              style: TextStyle(color: p.text),
-              decoration: InputDecoration(
-                labelText: AppText.get('listAddress'),
-                hintText: 'https://sunucu/liste.m3u',
-                prefixIcon: Icon(Icons.link),
-                border: OutlineInputBorder(
-                  borderRadius: BorderRadius.all(Radius.circular(10)),
+            Icon(Icons.featured_play_list_outlined,
+                size: 80, color: context.accent),
+            const SizedBox(height: 30),
+            if (_fromFile || _askForName || _isEditing) ...[
+              TextField(
+                controller: _nameController,
+                textCapitalization: TextCapitalization.sentences,
+                style: TextStyle(color: p.text),
+                decoration: InputDecoration(
+                  labelText: AppText.get('playlistName'),
+                  prefixIcon: Icon(Icons.bookmark_outline),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(10)),
+                  ),
+                  filled: true,
+                  fillColor: p.field,
+                  labelStyle: TextStyle(color: p.label),
                 ),
-                filled: true,
-                fillColor: p.field,
-                labelStyle: TextStyle(color: p.label),
-                hintStyle: TextStyle(color: p.muted),
+                onChanged: (_) => setState(() {}),
               ),
-              onChanged: (_) => setState(() {}),
-            ),
-          if (_error.isNotEmpty) ...[
-            const SizedBox(height: 12),
-            Text(_error, style: const TextStyle(color: Colors.red)),
-          ],
-          const SizedBox(height: 24),
-          FilledButton(
-            onPressed: _canSave ? _save : null,
-            style: context.primaryButtonStyle,
-            child: _busy
-                ? const SizedBox(
-                    height: 22,
-                    width: 22,
-                    child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
-                  )
-                : Text(AppText.get(_fromFile ? 'add' : 'open'), style: const TextStyle(fontSize: 16)),
-          ),
+              const SizedBox(height: 16),
             ],
-          ),
+            SegmentedButton<bool>(
+              segments: [
+                ButtonSegment(
+                    value: true,
+                    label: Text(AppText.get('file')),
+                    icon: const Icon(Icons.folder_open)),
+                ButtonSegment(
+                    value: false,
+                    label: Text(AppText.get('address')),
+                    icon: const Icon(Icons.link)),
+              ],
+              selected: {_fromFile},
+              onSelectionChanged: (value) {
+                setState(() {
+                  _fromFile = value.first;
+                  _error = '';
+                  if (_fromFile) _askForName = false;
+                });
+              },
+            ),
+            const SizedBox(height: 16),
+            if (_fromFile)
+              OutlinedButton.icon(
+                onPressed: _busy ? null : _pickFile,
+                icon: const Icon(Icons.upload_file),
+                label: Text(_fileButtonLabel),
+              )
+            else
+              TextField(
+                controller: _urlController,
+                keyboardType: TextInputType.url,
+                autocorrect: false,
+                style: TextStyle(color: p.text),
+                decoration: InputDecoration(
+                  labelText: AppText.get('listAddress'),
+                  hintText: 'https://sunucu/liste.m3u',
+                  prefixIcon: Icon(Icons.link),
+                  border: OutlineInputBorder(
+                    borderRadius: BorderRadius.all(Radius.circular(10)),
+                  ),
+                  filled: true,
+                  fillColor: p.field,
+                  labelStyle: TextStyle(color: p.label),
+                  hintStyle: TextStyle(color: p.muted),
+                ),
+                onChanged: (_) => setState(() {}),
+              ),
+            if (_error.isNotEmpty) ...[
+              const SizedBox(height: 12),
+              Text(_error, style: const TextStyle(color: Colors.red)),
+            ],
+            const SizedBox(height: 24),
+            FilledButton(
+              onPressed: _canSave ? _save : null,
+              style: context.primaryButtonStyle,
+              child: _busy
+                  ? const SizedBox(
+                      height: 22,
+                      width: 22,
+                      child: CircularProgressIndicator(
+                          strokeWidth: 2, color: Colors.white),
+                    )
+                  : Text(
+                      AppText.get(_isEditing
+                          ? 'save'
+                          : (_fromFile ? 'add' : 'open')),
+                      style: const TextStyle(fontSize: 16),
+                    ),
+            ),
+          ],
         ),
+      ),
     );
   }
 }

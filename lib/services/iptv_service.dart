@@ -23,6 +23,12 @@ class IptvService {
   // Her içerik türü için çalışan formatı önbellekte tut
   final Map<String, String> _formatCache = {};
 
+  // Katalog listeleri (kategori, film, dizi, kanal). 10 dk dolmadan tekrar istenmez.
+  static const Duration _catalogTtl = Duration(minutes: 10);
+  final Map<String, _CatalogSnapshot> _catalogCache = {};
+  final Map<String, Future<List<Map<String, dynamic>>>> _catalogInflight = {};
+  int _catalogEpoch = 0;
+
   // Her içerik türü için olası formatlar
   final Map<String, List<String>> _formatTemplates = {
     'live': [
@@ -139,6 +145,63 @@ class IptvService {
 
     // Önbelleği temizle (yeni giriş yapıldığında)
     _formatCache.clear();
+    _dropCatalog();
+  }
+
+  void _dropCatalog() {
+    _catalogEpoch++;
+    _catalogCache.clear();
+    _catalogInflight.clear();
+  }
+
+  /// Menüden Yenile: 10 dk katalog önbelleğini at, ağa yeniden çık.
+  void dropCatalogCache() => _dropCatalog();
+
+  List<Map<String, dynamic>>? _fresh(String key) {
+    final snapshot = _catalogCache[key];
+    if (snapshot == null) return null;
+    if (DateTime.now().difference(snapshot.savedAt) >= _catalogTtl) return null;
+    return snapshot.items;
+  }
+
+  List<Map<String, dynamic>>? freshMovies() => _fresh('movies');
+
+  List<Map<String, dynamic>>? freshSeries() => _fresh('series');
+
+  List<Map<String, dynamic>>? freshChannels(String categoryId) =>
+      _fresh('channels:$categoryId');
+
+  Future<List<Map<String, dynamic>>> _remember(
+    String key,
+    Future<List<Map<String, dynamic>>> Function() load,
+  ) {
+    final fresh = _fresh(key);
+    if (fresh != null) return Future.value(fresh);
+
+    final running = _catalogInflight[key];
+    if (running != null) return running;
+
+    final epoch = _catalogEpoch;
+    final future = () async {
+      try {
+        final items = await load();
+        if (epoch == _catalogEpoch) {
+          _catalogCache[key] = _CatalogSnapshot(items, DateTime.now());
+        }
+        return items;
+      } catch (e) {
+        Log.d('DBG', 'Catalog $key: $e');
+        if (epoch == _catalogEpoch) {
+          final stale = _catalogCache[key];
+          if (stale != null) return stale.items;
+        }
+        return <Map<String, dynamic>>[];
+      } finally {
+        if (epoch == _catalogEpoch) _catalogInflight.remove(key);
+      }
+    }();
+    _catalogInflight[key] = future;
+    return future;
   }
 
   Future<void> _loadCategories() async {
@@ -163,8 +226,8 @@ class IptvService {
   }
 
   // TV Kategorilerini getir
-  Future<List<Map<String, dynamic>>> getLiveCategories() async {
-    try {
+  Future<List<Map<String, dynamic>>> getLiveCategories() {
+    return _remember('live_categories', () async {
       final uri = Uri.parse('$_serverUrl/player_api.php').replace(
         queryParameters: {
           'username': _username,
@@ -179,16 +242,13 @@ class IptvService {
         final List<dynamic> data = json.decode(response.body);
         return List<Map<String, dynamic>>.from(data);
       }
-      return [];
-    } catch (e) {
-      Log.d("DBG", 'Get Live Categories error: $e');
-      return [];
-    }
+      throw Exception('status ${response.statusCode}');
+    });
   }
 
   // Film Kategorilerini getir
-  Future<List<Map<String, dynamic>>> getMovieCategories() async {
-    try {
+  Future<List<Map<String, dynamic>>> getMovieCategories() {
+    return _remember('movie_categories', () async {
       final uri = Uri.parse('$_serverUrl/player_api.php').replace(
         queryParameters: {
           'username': _username,
@@ -203,16 +263,13 @@ class IptvService {
         final List<dynamic> data = json.decode(response.body);
         return List<Map<String, dynamic>>.from(data);
       }
-      return [];
-    } catch (e) {
-      Log.d("DBG", 'Get Movie Categories error: $e');
-      return [];
-    }
+      throw Exception('status ${response.statusCode}');
+    });
   }
 
   // Dizi Kategorilerini getir
-  Future<List<Map<String, dynamic>>> getSeriesCategories() async {
-    try {
+  Future<List<Map<String, dynamic>>> getSeriesCategories() {
+    return _remember('series_categories', () async {
       final uri = Uri.parse('$_serverUrl/player_api.php').replace(
         queryParameters: {
           'username': _username,
@@ -227,11 +284,8 @@ class IptvService {
         final List<dynamic> data = json.decode(response.body);
         return List<Map<String, dynamic>>.from(data);
       }
-      return [];
-    } catch (e) {
-      Log.d("DBG", 'Get Series Categories error: $e');
-      return [];
-    }
+      throw Exception('status ${response.statusCode}');
+    });
   }
 
   Future<bool> login() async {
@@ -294,35 +348,18 @@ class IptvService {
     }
   }
 
-  Future<List<Map<String, dynamic>>> getCategories() async {
+  Future<List<Map<String, dynamic>>> getCategories() {
     if (_serverUrl == null || _username == null || _password == null) {
       throw Exception('IptvService not initialized');
     }
-
-    try {
-      final response = await http
-          .get(
-            Uri.parse(
-              '$_serverUrl/player_api.php?username=$_username&password=$_password&action=get_live_categories',
-            ),
-            headers: {'Content-Type': 'application/json'},
-          )
-          .timeout(const Duration(seconds: 10));
-
-      if (response.statusCode == 200) {
-        final List<dynamic> data = json.decode(response.body);
-        return data.map((item) => item as Map<String, dynamic>).toList();
-      }
-      throw Exception('Failed to load categories: ${response.statusCode}');
-    } catch (e) {
-      throw Exception('Failed to load categories: $e');
-    }
+    return getLiveCategories();
   }
 
-  Future<List<Map<String, dynamic>>> getChannels(String categoryId) async {
-    try {
-      if (kDebugMode)
+  Future<List<Map<String, dynamic>>> getChannels(String categoryId) {
+    return _remember('channels:$categoryId', () async {
+      if (kDebugMode) {
         Log.d("DBG", 'Debug - Getting channels for category: $categoryId');
+      }
       final uri = Uri.parse('$_serverUrl/player_api.php').replace(
         queryParameters: {
           'username': _username,
@@ -335,19 +372,27 @@ class IptvService {
       Log.d('DBG', 'Debug - Request URL: ${uri.toString()}');
       final response = await http.get(uri).timeout(const Duration(seconds: 30));
       Log.d('DBG', 'Debug - Response status: ${response.statusCode}');
-      Log.d('DBG', 'Debug - Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        if (data is List) {
-          return data.map((item) => Map<String, dynamic>.from(item)).toList();
-        }
+        return data.map((item) => Map<String, dynamic>.from(item)).toList();
       }
-      return [];
-    } catch (e) {
-      Log.d("DBG", 'Debug - Get Live TV error: $e');
-      return [];
+      throw Exception('status ${response.statusCode}');
+    });
+  }
+
+  /// Daha önce çalışan format varsa ağa çıkmadan URL kurar.
+  /// Kanal zap'ında her geçişte yayın yoklaması yapılmasın diye.
+  String? cachedStreamUrl({
+    required String streamId,
+    required String streamType,
+  }) {
+    if (_serverUrl == null || _username == null || _password == null) {
+      return null;
     }
+    final template = _formatCache[streamType];
+    if (template == null) return null;
+    return _applyTemplate(template, streamId, streamType);
   }
 
   Future<String?> getStreamUrl({
@@ -473,14 +518,33 @@ class IptvService {
     };
   }
 
+  void dropCachedStreamFormat(String streamType) {
+    _formatCache.remove(streamType);
+  }
+
+  /// Görüntü gelen canlı adresi bir sonraki açılışta da kullanılsın.
+  void rememberWorkingLiveUrl(String url) {
+    if (url.contains('.m3u8')) {
+      _formatCache['live'] = '{server}/live/{user}/{pass}/{id}.m3u8';
+    } else if (url.contains('.ts')) {
+      _formatCache['live'] = '{server}/live/{user}/{pass}/{id}.ts';
+    }
+  }
+
   // İlk baytlara bak. Panel yanlış uzantıya da 200 döndürebilir; o adres
   // önbelleğe yazılırsa VLC açılmaz ve "Devam Et" siyah kalır.
+  // İstemci kapanır: panel tek bağlantı sayıyorsa yoklama, asıl yayını 403 yapmasın.
   Future<bool> _urlWorks(String url) async {
+    final client = http.Client();
     try {
-      final response = await http
+      final response = await client
           .get(
             Uri.parse(url),
-            headers: const {'Range': 'bytes=0-15'},
+            headers: const {
+              'User-Agent': 'Mozilla/5.0',
+              'Range': 'bytes=0-15',
+              'Connection': 'close',
+            },
           )
           .timeout(const Duration(seconds: 4));
 
@@ -496,6 +560,8 @@ class IptvService {
       return _bytesMatchUrl(response.bodyBytes, url);
     } catch (_) {
       return false;
+    } finally {
+      client.close();
     }
   }
 
@@ -522,8 +588,8 @@ class IptvService {
   }
 
   // TV Kanallarını getir
-  Future<List<Map<String, dynamic>>> getLiveTV() async {
-    try {
+  Future<List<Map<String, dynamic>>> getLiveTV() {
+    return _remember('live_streams', () async {
       final uri = Uri.parse('$_serverUrl/player_api.php').replace(
         queryParameters: {
           'username': _username,
@@ -538,16 +604,13 @@ class IptvService {
         final List<dynamic> data = json.decode(response.body);
         return List<Map<String, dynamic>>.from(data);
       }
-      return [];
-    } catch (e) {
-      Log.d("DBG", 'Get Live TV error: $e');
-      return [];
-    }
+      throw Exception('status ${response.statusCode}');
+    });
   }
 
   // Filmleri getir
-  Future<List<Map<String, dynamic>>> getMovies() async {
-    try {
+  Future<List<Map<String, dynamic>>> getMovies() {
+    return _remember('movies', () async {
       Log.d('DBG', 'Debug - Getting all movies');
       final uri = Uri.parse('$_serverUrl/player_api.php').replace(
         queryParameters: {
@@ -560,24 +623,18 @@ class IptvService {
       Log.d('DBG', 'Debug - Request URL: ${uri.toString()}');
       final response = await http.get(uri).timeout(const Duration(seconds: 30));
       Log.d('DBG', 'Debug - Response status: ${response.statusCode}');
-      Log.d('DBG', 'Debug - Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        if (data is List) {
-          return data.map((item) => Map<String, dynamic>.from(item)).toList();
-        }
+        return data.map((item) => Map<String, dynamic>.from(item)).toList();
       }
-      return [];
-    } catch (e) {
-      Log.d("DBG", 'Debug - Get Movies error: $e');
-      return [];
-    }
+      throw Exception('status ${response.statusCode}');
+    });
   }
 
   // Dizileri getir
-  Future<List<Map<String, dynamic>>> getSeries() async {
-    try {
+  Future<List<Map<String, dynamic>>> getSeries() {
+    return _remember('series', () async {
       Log.d('DBG', 'Debug - Getting all series');
       final uri = Uri.parse('$_serverUrl/player_api.php').replace(
         queryParameters: {
@@ -590,19 +647,13 @@ class IptvService {
       Log.d('DBG', 'Debug - Request URL: ${uri.toString()}');
       final response = await http.get(uri).timeout(const Duration(seconds: 30));
       Log.d('DBG', 'Debug - Response status: ${response.statusCode}');
-      Log.d('DBG', 'Debug - Response body: ${response.body}');
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
-        if (data is List) {
-          return data.map((item) => Map<String, dynamic>.from(item)).toList();
-        }
+        return data.map((item) => Map<String, dynamic>.from(item)).toList();
       }
-      return [];
-    } catch (e) {
-      Log.d("DBG", 'Debug - Get Series error: $e');
-      return [];
-    }
+      throw Exception('status ${response.statusCode}');
+    });
   }
 
   // Dizi detaylarını getir
@@ -962,7 +1013,7 @@ class IptvService {
 
   // En yeni filmleri getir
   Future<List<Map<String, dynamic>>> getLatestMovies({int limit = 25}) async {
-    final movies = await getMovies();
+    final movies = List<Map<String, dynamic>>.from(await getMovies());
     final sorted = _sortByAddedDesc(movies);
     final latest = sorted.take(limit).toList();
 
@@ -979,17 +1030,24 @@ class IptvService {
 
   // En yeni dizileri getir
   Future<List<Map<String, dynamic>>> getLatestSeries({int limit = 25}) async {
-    final seriesList = await getSeries();
+    final seriesList = List<Map<String, dynamic>>.from(await getSeries());
     final sorted = _sortByAddedDesc(seriesList);
     return sorted.take(limit).toList();
   }
 
   // En yeni kanalları getir
   Future<List<Map<String, dynamic>>> getLatestChannels({int limit = 10}) async {
-    final channels = await getLiveTV();
+    final channels = List<Map<String, dynamic>>.from(await getLiveTV());
     final sorted = _sortByAddedDesc(channels);
     return sorted.take(limit).toList();
   }
+}
+
+class _CatalogSnapshot {
+  final List<Map<String, dynamic>> items;
+  final DateTime savedAt;
+
+  const _CatalogSnapshot(this.items, this.savedAt);
 }
 
 // Arama sonuçları için model sınıfı

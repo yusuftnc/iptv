@@ -3,9 +3,9 @@
 #   dart run build_runner build --delete-conflicting-outputs
 # Cihazlar arası senkron aynı sırrı kullanır; değiştirirsen eski Firebase hesabı açılmaz.
 CREDENTIALS_SECRET=iptv_dev_only_replace_with_long_random_secret_in_production
-# Debug (flutter run). Release/profile bu anahtarı kullanmaz; kullanırsa uygulama kapanır.
+# Yedek: goog_/appl_ yokken yalnız debug. Release'e koyma; SDK uygulamayı kapatır.
 REVENUECAT_TEST_API_KEY=test_paste_the_public_sdk_key
 # RevenueCat → Project → Apps → ilgili uygulamanın public SDK key'i.
-# Secret key (sk_) yazılmaz.
+# Secret key (sk_) yazılmaz. goog_ doluysa Play hesabı ile satın alma / geri yükleme açılır.
 REVENUECAT_APPLE_API_KEY=
 REVENUECAT_GOOGLE_API_KEY=

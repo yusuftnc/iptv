@@ -68,6 +68,7 @@ class PlayerScreen extends StatefulWidget {
 class _PlayerScreenState extends State<PlayerScreen> {
   VlcPlayerController? _controller;
   bool _isLoading = true;
+  bool _hasPicture = false;
   bool _hasError = false;
   String _errorMessage = '';
   final IptvService _iptvService = IptvService();
@@ -107,8 +108,25 @@ class _PlayerScreenState extends State<PlayerScreen> {
   /// Kaldığı yer henüz oynatıcıda görünmeden yazılan konum, kayıtlı süreyi ezmesin.
   bool _resumeSeekSettled = false;
 
-  // İzleme geçmişi anahtarı
-  late final String _historyId;
+  // İzleme geçmişi anahtarı. Canlı zap'ta kanal değişince güncellenir.
+  late String _historyId;
+
+  /// Oynatılan içeriğin kimliği. Widget alanları zap sırasında değişmez.
+  late String _activeContentId;
+  late String _activeName;
+  String? _activeIcon;
+  late String _activeStreamUrl;
+
+  /// Eski bir init, zap'tan sonra controller'ı kapatmasın.
+  int _playerEpoch = 0;
+  int _zapToken = 0;
+  Future<void> _zapChain = Future<void>.value();
+
+  /// Canlı yayın görüntü vermezse arkada aynı adres, sonra diğer uzantı denenir.
+  Timer? _playbackWatch;
+  int _playbackTries = 0;
+  bool _awaitingPicture = false;
+  bool _playbackRetrying = false;
 
   /// player_api çözümledikten sonra kullanılan gerçek URL (veritabanına yazılır)
   String? _resolvedStreamUrl;
@@ -136,6 +154,9 @@ class _PlayerScreenState extends State<PlayerScreen> {
       (_resolvedStreamUrl != null && _resolvedStreamUrl!.isNotEmpty)
           ? _resolvedStreamUrl!
           : widget.streamUrl;
+
+  String get _loadingLabel =>
+      _activeName.isEmpty ? 'Video yükleniyor...' : _activeName;
 
   bool get _hasPreviousEpisode =>
       _playlist != null &&
@@ -197,6 +218,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
   void initState() {
     super.initState();
     _historyId = widget.historyId;
+    _activeContentId = widget.contentId;
+    _activeName = widget.name;
+    _activeIcon = widget.streamIcon;
+    _activeStreamUrl = widget.streamUrl;
     _playlist = widget.playlist;
     _playlistIndex = widget.playlistIndex;
     _channels = widget.channels;
@@ -218,6 +243,8 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _checkWatchPosition().then((_) async {
       if (!mounted) return;
       if (!widget.skipPreRoll) await AdsService.showPreRoll();
+      if (!mounted) return;
+      await _waitUntilResumed();
       if (!mounted) return;
       _initializePlayer();
       if (widget.allowFavorite) _checkIfFavorite();
@@ -418,7 +445,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
     if (_playlist != null && _playlist!.isNotEmpty) {
       _playlistIndex ??=
-          _playlist!.indexWhere((e) => e.id == widget.contentId);
+          _playlist!.indexWhere((e) => e.id == _activeContentId);
       if (_playlistIndex == -1) _playlistIndex = null;
       if (mounted) setState(() {});
       return;
@@ -438,7 +465,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         return a.compareTo(b);
       });
 
-      var seriesTitle = widget.name.trim();
+      var seriesTitle = _activeName.trim();
       final titleMatch = RegExp(r'\s-\sS\d+E').firstMatch(seriesTitle);
       if (titleMatch != null && titleMatch.start > 0) {
         seriesTitle = seriesTitle.substring(0, titleMatch.start).trim();
@@ -470,7 +497,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       if (!mounted) return;
       setState(() {
         _playlist = flat;
-        final idx = flat.indexWhere((e) => e.id == widget.contentId);
+        final idx = flat.indexWhere((e) => e.id == _activeContentId);
         _playlistIndex = idx >= 0 ? idx : null;
       });
     } catch (e) {
@@ -480,7 +507,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _checkIfFavorite() async {
     final isFavorite = await _databaseService.isFavorite(
-      widget.contentId,
+      _activeContentId,
       refreshFromCloud: true,
     );
     if (mounted) {
@@ -492,18 +519,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
   Future<void> _toggleFavorite() async {
     if (_isFavorite) {
-      await _databaseService.removeFavorite(widget.contentId);
+      await _databaseService.removeFavorite(_activeContentId);
     } else {
       await _databaseService.addFavorite(ContentItem(
-        id: widget.contentId,
-        name: widget.name,
+        id: _activeContentId,
+        name: _activeName,
         streamUrl: _streamUrlForStorage,
         streamType: widget.contentType,
-        streamIcon: widget.streamIcon,
+        streamIcon: _activeIcon,
         historyId: _historyId,
       ));
     }
 
+    if (!mounted) return;
     setState(() {
       _isFavorite = !_isFavorite;
     });
@@ -512,21 +540,21 @@ class _PlayerScreenState extends State<PlayerScreen> {
   Future<void> _addToWatchHistory() async {
     try {
       Log.d("DBG",
-          "Debug - İlk izleme pozisyonu kontrolü başlatılıyor: ${widget.contentId}");
-      Log.d("DBG", "Debug - İzleme geçmişine ekleniyor: ${widget.contentId}");
+          "Debug - İlk izleme pozisyonu kontrolü başlatılıyor: ${_activeContentId}");
+      Log.d("DBG", "Debug - İzleme geçmişine ekleniyor: ${_activeContentId}");
 
       final existing = await _databaseService.getWatchPosition(_historyId);
       final sameVideo =
-          existing != null && existing.contentId == widget.contentId;
+          existing != null && existing.contentId == _activeContentId;
 
       // Açılış kaydı pozisyon taşımaz. Aynı videonun kayıtlı yerini null ile ezmek
       // "Devam Et" düğmesini düşürür; kullanıcı seek bitmeden geri dönerse özellikle.
       await _databaseService.addToWatchHistory(ContentItem(
-        id: widget.contentId,
-        name: widget.name,
+        id: _activeContentId,
+        name: _activeName,
         streamUrl: _streamUrlForStorage,
         streamType: widget.contentType,
-        streamIcon: widget.streamIcon,
+        streamIcon: _activeIcon,
         position: sameVideo ? existing.position : null,
         duration: sameVideo ? existing.duration : null,
         historyId: _historyId,
@@ -550,14 +578,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
           _currentPosition.inSeconds < _totalDuration.inSeconds) {
         Log.d("DBG",
             "Debug - İzleme pozisyonu güncelleniyor: ${_currentPosition.inSeconds} / ${_totalDuration.inSeconds}");
-        Log.d("DBG", "Debug - ContentItem ID: ${widget.contentId}");
+        Log.d("DBG", "Debug - ContentItem ID: ${_activeContentId}");
 
         final contentItem = ContentItem(
-          id: widget.contentId,
-          name: widget.name,
+          id: _activeContentId,
+          name: _activeName,
           streamUrl: _streamUrlForStorage,
           streamType: widget.contentType,
-          streamIcon: widget.streamIcon,
+          streamIcon: _activeIcon,
           position: _currentPosition.inSeconds,
           duration: _totalDuration.inSeconds,
           historyId: _historyId,
@@ -588,7 +616,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         return;
       }
       Log.d("DBG",
-          "Debug - İzleme pozisyonu kontrol ediliyor: ${widget.contentId}");
+          "Debug - İzleme pozisyonu kontrol ediliyor: ${_activeContentId}");
       final watchHistory = await _databaseService.getWatchPosition(
         _historyId,
         refreshFromCloud: true,
@@ -597,12 +625,12 @@ class _PlayerScreenState extends State<PlayerScreen> {
           "Debug - Alınan izleme geçmişi: ${watchHistory?.position} / ${watchHistory?.duration}");
       Log.d("DBG",
           "Debug - İzleme geçmişi contentId: ${watchHistory?.contentId}");
-      Log.d("DBG", "Debug - Current contentItem id: ${widget.contentId}");
+      Log.d("DBG", "Debug - Current contentItem id: ${_activeContentId}");
 
-      final sameEpisode = watchHistory?.contentId == widget.contentId;
+      final sameEpisode = watchHistory?.contentId == _activeContentId;
       if (!sameEpisode && watchHistory != null) {
         Log.d("DBG",
-            "Debug - Kayıt başka bir bölüme ait (${watchHistory.contentId} vs ${widget.contentId}), devam diyalogu atlanıyor");
+            "Debug - Kayıt başka bir bölüme ait (${watchHistory.contentId} vs ${_activeContentId}), devam diyalogu atlanıyor");
       }
 
       if (watchHistory != null &&
@@ -626,11 +654,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
                   onPressed: () {
                     // Baştan başla seçildiğinde pozisyonu sıfırla
                     _databaseService.addToWatchHistory(ContentItem(
-                      id: widget.contentId,
-                      name: widget.name,
+                      id: _activeContentId,
+                      name: _activeName,
                       streamUrl: _streamUrlForStorage,
                       streamType: widget.contentType,
-                      streamIcon: widget.streamIcon,
+                      streamIcon: _activeIcon,
                       position: 0,
                       duration: watchHistory.duration,
                       historyId: _historyId,
@@ -701,7 +729,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           Log.d("DBG", "Debug - İzleme geçmişi bulunamadı");
         } else if (!sameEpisode) {
           Log.d("DBG",
-              "Debug - Kayıt son izlenen bölüme (${watchHistory.contentId}) ait, şu anki bölüm ${widget.contentId}; bu bölüm baştan oynatılır");
+              "Debug - Kayıt son izlenen bölüme (${watchHistory.contentId}) ait, şu anki bölüm ${_activeContentId}; bu bölüm baştan oynatılır");
         } else if (watchHistory.position == null) {
           Log.d("DBG", "Debug - İzleme pozisyonu null");
         } else if (watchHistory.position! <= 10) {
@@ -720,10 +748,54 @@ class _PlayerScreenState extends State<PlayerScreen> {
     }
   }
 
-  Future<void> _initializePlayer() async {
+  /// Reklam kapanışı bazen oynatıcıdan sonra bir duraklatma daha yollar.
+  Future<void> _playIfStillPaused() async {
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+    final controller = _controller;
+    if (!mounted || controller == null) return;
+    if (controller.value.isPlaying || controller.value.isEnded) return;
+    if (WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
     try {
+      await controller.play();
+    } catch (_) {}
+  }
+
+  /// Tam ekran reklam kapanırken uygulama kısa süre duraklar.
+  /// Oynatıcı o anda kurulursa video açılır ama play basılana kadar durur.
+  Future<void> _waitUntilResumed() async {
+    if (WidgetsBinding.instance.lifecycleState == AppLifecycleState.resumed) {
+      await WidgetsBinding.instance.endOfFrame;
+      return;
+    }
+    final done = Completer<void>();
+    final listener = AppLifecycleListener(
+      onResume: () {
+        if (!done.isCompleted) done.complete();
+      },
+    );
+    try {
+      await done.future.timeout(const Duration(seconds: 2));
+    } on TimeoutException {
+      // Yaşam döngüsü gelmezse oynatıcı yine de kurulsun.
+    } finally {
+      listener.dispose();
+    }
+  }
+
+  bool _initIsCurrent(int epoch) => mounted && epoch == _playerEpoch;
+
+  Future<void> _initializePlayer() async {
+    final epoch = ++_playerEpoch;
+    try {
+      if (!mounted) return;
+      _playbackWatch?.cancel();
+      _playbackTries = 0;
+      _awaitingPicture = false;
       setState(() {
         _isLoading = true;
+        _hasPicture = false;
         _hasError = false;
         _errorMessage = '';
       });
@@ -732,14 +804,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
       String? streamUrl;
 
       final playlistUrl = _playlist
-          ?.where((e) => e.id == widget.contentId)
+          ?.where((e) => e.id == _activeContentId)
           .map((e) => e.streamUrl)
           .whereType<String>()
           .where((url) => url.isNotEmpty)
           .firstOrNull;
 
-      if (widget.streamUrl.isNotEmpty) {
-        streamUrl = widget.streamUrl;
+      if (_activeStreamUrl.isNotEmpty) {
+        streamUrl = _activeStreamUrl;
         Log.d("DBG", 'Debug - ContentItem\'dan URL kullanılıyor: $streamUrl');
       } else if (playlistUrl != null) {
         streamUrl = playlistUrl;
@@ -749,10 +821,10 @@ class _PlayerScreenState extends State<PlayerScreen> {
         final streamType = widget.contentType ?? 'live';
 
         // Eğer dizi bölümü ise, özel işlem yap
-        if (streamType == 'series' && widget.contentId.isNotEmpty) {
+        if (streamType == 'series' && _activeContentId.isNotEmpty) {
           // Dizi bölüm ID'sini kullanarak stream URL'ini al
           streamUrl = await _iptvService.getStreamUrl(
-            streamId: widget.contentId,
+            streamId: _activeContentId,
             streamType: 'series',
           );
 
@@ -765,14 +837,14 @@ class _PlayerScreenState extends State<PlayerScreen> {
             if (serverUrl != null && username != null && password != null) {
               // Farklı formatları dene
               final formats = [
-                '$serverUrl/series/$username/$password/${widget.contentId}.mp4',
-                '$serverUrl/series/$username/$password/${widget.contentId}.mkv',
-                '$serverUrl/series/$username/$password/${widget.contentId}.ts',
-                '$serverUrl/series/$username/$password/${widget.contentId}.m3u8',
-                '$serverUrl/series/$username/$password/series/${widget.contentId}.mp4',
-                '$serverUrl/series/$username/$password/series/${widget.contentId}.mkv',
-                '$serverUrl/series/$username/$password/series/${widget.contentId}.ts',
-                '$serverUrl/series/$username/$password/series/${widget.contentId}.m3u8',
+                '$serverUrl/series/$username/$password/${_activeContentId}.mp4',
+                '$serverUrl/series/$username/$password/${_activeContentId}.mkv',
+                '$serverUrl/series/$username/$password/${_activeContentId}.ts',
+                '$serverUrl/series/$username/$password/${_activeContentId}.m3u8',
+                '$serverUrl/series/$username/$password/series/${_activeContentId}.mp4',
+                '$serverUrl/series/$username/$password/series/${_activeContentId}.mkv',
+                '$serverUrl/series/$username/$password/series/${_activeContentId}.ts',
+                '$serverUrl/series/$username/$password/series/${_activeContentId}.m3u8',
               ];
 
               // İlk formatı kullan (daha sonra diğerlerini deneyebiliriz)
@@ -783,7 +855,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         } else {
           // Normal içerik için stream URL'ini al
           streamUrl = await _iptvService.getStreamUrl(
-            streamId: widget.contentId,
+            streamId: _activeContentId,
             streamType: streamType,
           );
         }
@@ -791,17 +863,19 @@ class _PlayerScreenState extends State<PlayerScreen> {
       }
       Log.d("DBG", 'Debug - Stream URL: $streamUrl');
       Log.d("DBG", 'Debug - Content Type: ${widget.contentType}');
-      Log.d("DBG", 'Debug - Content ID: ${widget.contentId}');
+      Log.d("DBG", 'Debug - Content ID: ${_activeContentId}');
 
       if (streamUrl == null || streamUrl.isEmpty) {
         throw Exception('Stream URL bulunamadı');
       }
+      _activeStreamUrl = streamUrl;
       _resolvedStreamUrl = streamUrl;
 
       // İlk önce izleme pozisyonunu al
       Log.d("DBG",
           "Debug - Video yüklenmeden önce izleme pozisyonu kontrol ediliyor.");
       final watchHistory = await _databaseService.getWatchPosition(_historyId);
+      if (!_initIsCurrent(epoch)) return;
       Log.d("DBG",
           "Debug - İzleme geçmişi: ${watchHistory?.position} / ${watchHistory?.duration}");
 
@@ -810,7 +884,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
       int? resumePosition;
 
       final recordMatchesThisVideo =
-          watchHistory?.contentId == widget.contentId;
+          watchHistory?.contentId == _activeContentId;
       if (widget.contentType != 'live' &&
           watchHistory != null &&
           recordMatchesThisVideo &&
@@ -833,16 +907,30 @@ class _PlayerScreenState extends State<PlayerScreen> {
       _initialSeekPosition = resumePosition;
       _shouldSeekToInitialPosition = shouldResume;
 
-      // Önceki controller'ı temizle
-      await _controller?.dispose();
+      if (!_initIsCurrent(epoch)) return;
 
-      // Yeni controller oluştur
+      final previous = _controller;
+      _controller = null;
+      if (previous != null) {
+        try {
+          await previous.dispose();
+        } catch (e) {
+          Log.d('DBG', 'Debug - Eski oynatıcı kapanırken: $e');
+        }
+      }
+      if (!_initIsCurrent(epoch)) return;
+
+      // Yeni controller oluştur. Canlıda tampon kısa tutulur; zap bekletmesin.
       final initialOptions = VlcPlayerOptions(
         advanced: VlcAdvancedOptions([
-          VlcAdvancedOptions.networkCaching(2000),
+          VlcAdvancedOptions.networkCaching(
+            widget.contentType == 'live' ? 800 : 2000,
+          ),
         ]),
         http: VlcHttpOptions([
           VlcHttpOptions.httpReconnect(true),
+          // API tarafıyla aynı UA; bazı paneller LibVLC varsayılanını 401 kesiyor.
+          VlcHttpOptions.httpUserAgent('Mozilla/5.0'),
         ]),
         video: VlcVideoOptions([
           VlcVideoOptions.dropLateFrames(true),
@@ -873,6 +961,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
 
         if (!shouldAutoPlay) {
           Log.d("DBG", "Debug - Pozisyon ayarlanana kadar video duraklatıldı");
+        } else {
+          try {
+            await _controller?.play();
+          } catch (_) {}
+          unawaited(_playIfStillPaused());
         }
 
         if (_shouldSeekToInitialPosition && _initialSeekPosition != null) {
@@ -892,6 +985,15 @@ class _PlayerScreenState extends State<PlayerScreen> {
         if (_controller == null || !mounted) return;
 
         final v = _controller!.value;
+        if (v.isPlaying && (_awaitingPicture || !_hasPicture)) {
+          _notePictureArrived();
+          if (!_hasPicture) setState(() => _hasPicture = true);
+        } else if (_awaitingPicture &&
+            v.playingState == PlayingState.error &&
+            !_playbackRetrying) {
+          _playbackWatch?.cancel();
+          unawaited(_retryIfNoPicture());
+        }
         if (v.isInitialized &&
             v.isPlaying &&
             v.position.inSeconds > 0 &&
@@ -915,21 +1017,96 @@ class _PlayerScreenState extends State<PlayerScreen> {
         }
       });
 
+      if (!_initIsCurrent(epoch)) return;
       setState(() {
         _isLoading = false;
       });
 
       // İzleme geçmişine ekle (başlangıç kaydı)
       _addToWatchHistory();
+      _armPlaybackWatch();
     } catch (e) {
       Log.d("DBG", 'Debug - Hata oluştu: $e');
       Log.d("DBG", 'Debug - Hata türü: ${e.runtimeType}');
+      if (!_initIsCurrent(epoch)) return;
       setState(() {
         _hasError = true;
         _errorMessage = 'Video oynatıcı başlatılamadı: ${e.toString()}';
         _isLoading = false;
       });
     }
+  }
+
+  void _armPlaybackWatch() {
+    if (widget.contentType != 'live' || _hasPicture) return;
+    _playbackWatch?.cancel();
+    _awaitingPicture = true;
+    _playbackWatch = Timer(const Duration(seconds: 7), () {
+      unawaited(_retryIfNoPicture());
+    });
+  }
+
+  void _notePictureArrived() {
+    if (!_awaitingPicture && _hasPicture) return;
+    _awaitingPicture = false;
+    _playbackTries = 0;
+    _playbackWatch?.cancel();
+    if (widget.contentType == 'live') {
+      _iptvService.rememberWorkingLiveUrl(_activeStreamUrl);
+    }
+  }
+
+  String? _alternateLiveUrl(String url) {
+    if (url.contains('.m3u8')) return url.replaceFirst('.m3u8', '.ts');
+    if (url.contains('.ts')) return url.replaceFirst('.ts', '.m3u8');
+    return null;
+  }
+
+  Future<void> _retryIfNoPicture() async {
+    if (_playbackRetrying || !mounted || _hasPicture || !_awaitingPicture) {
+      return;
+    }
+    if (widget.contentType != 'live') return;
+    _playbackRetrying = true;
+    _playbackWatch?.cancel();
+    try {
+      _playbackTries++;
+      if (_playbackTries > 2) {
+        _awaitingPicture = false;
+        if (!mounted) return;
+        setState(() {
+          _hasError = true;
+          _isLoading = false;
+          _errorMessage = 'Yayın açılmadı. Bir kez daha deneyebilirsin.';
+        });
+        return;
+      }
+
+      var url = _activeStreamUrl;
+      if (_playbackTries == 2) {
+        final alt = _alternateLiveUrl(url);
+        if (alt != null && alt != url) {
+          url = alt;
+          _activeStreamUrl = url;
+          _resolvedStreamUrl = url;
+          _iptvService.dropCachedStreamFormat('live');
+          Log.d('DBG', 'Yayın diğer adres biçimiyle deneniyor');
+        }
+      } else {
+        Log.d('DBG', 'Görüntü gelmedi, yayın yeniden deneniyor');
+      }
+
+      final controller = _controller;
+      if (controller == null || !controller.value.isInitialized) return;
+      try {
+        await controller.setMediaFromNetwork(url, autoPlay: true);
+      } catch (e) {
+        Log.d('DBG', 'Yeniden deneme olmadı: $e');
+      }
+    } finally {
+      _playbackRetrying = false;
+    }
+    if (mounted && _awaitingPicture && !_hasPicture) _armPlaybackWatch();
   }
 
   void _startHideControlsTimer() {
@@ -1243,11 +1420,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
     if (_totalDuration.inSeconds > 0) {
       try {
         await _databaseService.addToWatchHistory(ContentItem(
-          id: widget.contentId,
-          name: widget.name,
+          id: _activeContentId,
+          name: _activeName,
           streamUrl: _streamUrlForStorage,
           streamType: widget.contentType,
-          streamIcon: widget.streamIcon,
+          streamIcon: _activeIcon,
           position: _totalDuration.inSeconds,
           duration: _totalDuration.inSeconds,
           historyId: _historyId,
@@ -1288,7 +1465,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
           streamUrl: next.streamUrl ?? '',
           contentType: 'series',
           name: next.name,
-          streamIcon: widget.streamIcon,
+          streamIcon: _activeIcon,
           playlist: _playlist,
           playlistIndex: nextIndex,
           lockLandscape: _isFullScreen,
@@ -1301,55 +1478,123 @@ class _PlayerScreenState extends State<PlayerScreen> {
     );
   }
 
-  Future<void> _zapChannel(int delta) async {
-    if (!_hasChannelList || _channelIndex == null) return;
-    final nextIndex = _channelIndex! + delta;
-    if (nextIndex < 0 || nextIndex >= _channels!.length) return;
-    if (!mounted) return;
+  /// Adresin içindeki yayın kimliğini değiştirir. Zap'ta yeni istek açılmaz.
+  String? _swapStreamId(String url, String fromId, String toId) {
+    if (url.isEmpty || fromId.isEmpty || fromId == toId) return null;
+    final pattern = RegExp('(?<=/)${RegExp.escape(fromId)}(?=\\.|/|\\?|\$)');
+    final matches = pattern.allMatches(url).toList();
+    if (matches.isEmpty) return null;
+    final match = matches.last;
+    return url.replaceRange(match.start, match.end, toId);
+  }
 
+  Future<String> _resolveZapUrl(
+    LiveChannel next,
+    String previousUrl,
+    String previousId,
+  ) async {
+    if (next.streamUrl.isNotEmpty) return next.streamUrl;
+    final swapped = _swapStreamId(previousUrl, previousId, next.id);
+    if (swapped != null && swapped.isNotEmpty) return swapped;
+    final cached = _iptvService.cachedStreamUrl(
+      streamId: next.id,
+      streamType: 'live',
+    );
+    if (cached != null && cached.isNotEmpty) return cached;
+    try {
+      return await _iptvService.getStreamUrl(
+            streamId: next.id,
+            streamType: 'live',
+          ) ??
+          '';
+    } catch (_) {
+      return '';
+    }
+  }
+
+  Future<void> _zapChannel(int delta) {
+    if (!_hasChannelList || _channelIndex == null || !mounted) {
+      return Future<void>.value();
+    }
+    final nextIndex = _channelIndex! + delta;
+    if (nextIndex < 0 || nextIndex >= _channels!.length) {
+      return Future<void>.value();
+    }
+
+    final previousId = _activeContentId;
+    final previousUrl = _activeStreamUrl.isNotEmpty
+        ? _activeStreamUrl
+        : (_resolvedStreamUrl ?? '');
     final next = _channels![nextIndex];
+    final token = ++_zapToken;
+
     var url = next.streamUrl;
     if (url.isEmpty) {
-      try {
-        url = await _iptvService.getStreamUrl(
-              streamId: next.id,
-              streamType: 'live',
-            ) ??
-            '';
-      } catch (_) {
-        url = '';
-      }
+      url = _swapStreamId(previousUrl, previousId, next.id) ?? '';
     }
-    if (!mounted) return;
     if (url.isEmpty) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Kanal açılamadı')),
-      );
-      return;
+      url = _iptvService.cachedStreamUrl(
+            streamId: next.id,
+            streamType: 'live',
+          ) ??
+          '';
+    }
+    if (url.isNotEmpty) {
+      _activeStreamUrl = url;
+      _resolvedStreamUrl = url;
     }
 
-    _navigatingToEpisode = true;
-    Navigator.of(context).pushReplacement(
-      PageRouteBuilder(
-        pageBuilder: (context, animation, secondaryAnimation) => PlayerScreen(
-          contentId: next.id,
-          historyId: next.historyId,
-          streamUrl: url,
-          contentType: 'live',
-          name: next.name,
-          streamIcon: next.icon,
-          channels: _channels,
-          channelIndex: nextIndex,
-          lockLandscape: _isFullScreen,
-          allowFavorite: widget.allowFavorite,
-          skipPreRoll: true,
-        ),
-        transitionsBuilder: (context, animation, secondaryAnimation, child) {
-          return FadeTransition(opacity: animation, child: child);
-        },
-        transitionDuration: const Duration(milliseconds: 150),
-      ),
-    );
+    setState(() {
+      _channelIndex = nextIndex;
+      _activeContentId = next.id;
+      _activeName = next.name;
+      _activeIcon = next.icon;
+      _historyId = next.historyId;
+      _currentPosition = Duration.zero;
+      _totalDuration = Duration.zero;
+      _lastSavedPosition = null;
+      _showControls = true;
+      _hasError = false;
+    });
+
+    final pending = _zapChain.catchError((Object _) {}).then((_) async {
+      if (!mounted || token != _zapToken) return;
+      var playUrl = url;
+      if (playUrl.isEmpty) {
+        playUrl = await _resolveZapUrl(next, previousUrl, previousId);
+      }
+      if (!mounted || token != _zapToken) return;
+      if (playUrl.isEmpty) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('Kanal açılamadı')),
+        );
+        return;
+      }
+      _activeStreamUrl = playUrl;
+      _resolvedStreamUrl = playUrl;
+
+      final controller = _controller;
+      if (controller != null && controller.value.isInitialized) {
+        _playerEpoch++;
+        try {
+          await controller.setMediaFromNetwork(playUrl, autoPlay: true);
+          _audioPrefApplied = false;
+          _subtitlePrefApplied = false;
+        } catch (e) {
+          Log.d('DBG', 'Kanal geçişi oynatıcıda değişmedi: $e');
+          if (!mounted || token != _zapToken) return;
+          await _initializePlayer();
+        }
+      } else if (mounted && token == _zapToken) {
+        await _initializePlayer();
+      }
+
+      if (!mounted || token != _zapToken) return;
+      _addToWatchHistory();
+      if (widget.allowFavorite) unawaited(_checkIfFavorite());
+    });
+    _zapChain = pending;
+    return pending;
   }
 
   Future<void> _waitForPopupToClose() async {
@@ -1801,6 +2046,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
     _hideControlsTimer?.cancel();
     _trackPrefTimer?.cancel();
     _initialSeekFallbackTimer?.cancel();
+    _playbackWatch?.cancel();
     _castSessionSub?.cancel();
     _castMediaSub?.cancel();
     _castPositionSub?.cancel();
@@ -1814,7 +2060,17 @@ class _PlayerScreenState extends State<PlayerScreen> {
     } else {
       unawaited(CastService.instance.stopDiscovery());
     }
-    _controller?.dispose();
+    final closing = _controller;
+    _controller = null;
+    if (closing != null) {
+      unawaited(Future<void>(() async {
+        try {
+          await closing.dispose();
+        } catch (e) {
+          Log.d('DBG', 'player dispose: $e');
+        }
+      }));
+    }
 
     _restoreExitOrientations();
     _restorePlayerSystemUi();
@@ -1863,7 +2119,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             ),
             SizedBox(height: 16),
             Text(
-              'Video yükleniyor...',
+              _loadingLabel,
               style: TextStyle(color: Colors.white),
             ),
           ],
@@ -1934,7 +2190,22 @@ class _PlayerScreenState extends State<PlayerScreen> {
           ),
         ),
 
-        _buildControls(),
+        if (_hasPicture)
+          _buildControls()
+        else
+          Center(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                const CircularProgressIndicator(color: Colors.white),
+                const SizedBox(height: 16),
+                Text(
+                  _loadingLabel,
+                  style: const TextStyle(color: Colors.white),
+                ),
+              ],
+            ),
+          ),
 
         if (_isCasting)
           Positioned(
@@ -2251,7 +2522,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         // İçerik başlığı - ortada
         Expanded(
           child: Text(
-            '',
+            _activeName,
             style: const TextStyle(
               color: Colors.white,
               fontSize: 16,
@@ -2366,7 +2637,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
         // İçerik başlığı - ortada
         Expanded(
           child: Text(
-            '',
+            _activeName,
             style: const TextStyle(
               color: Colors.white,
               fontSize: 16,

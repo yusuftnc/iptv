@@ -9,8 +9,8 @@ abstract class Env {
   @EnviedField(varName: 'CREDENTIALS_SECRET')
   static final String credentialsSecret = _Env.credentialsSecret;
 
-  /// Debug derlemesi. `test_` ile başlar. Release bu anahtarla açılırsa
-  /// RevenueCat uygulamayı kapatır.
+  /// Yedek: yalnız `goog_` / `appl_` yokken debug'da. `test_` ile başlar.
+  /// Release bu anahtarla açılırsa RevenueCat uygulamayı kapatır.
   @EnviedField(varName: 'REVENUECAT_TEST_API_KEY')
   static final String revenueCatTestApiKey = _Env.revenueCatTestApiKey;
 
@@ -19,6 +19,7 @@ abstract class Env {
   static final String revenueCatAppleApiKey = _Env.revenueCatAppleApiKey;
 
   /// Play Store public SDK anahtarı. `goog_` ile başlar. Secret (`sk_`) değildir.
+  /// Doluysa debug dahil Play hesabı / geri yükleme bu anahtarla çalışır.
   @EnviedField(varName: 'REVENUECAT_GOOGLE_API_KEY', defaultValue: '')
   static final String revenueCatGoogleApiKey = _Env.revenueCatGoogleApiKey;
 }

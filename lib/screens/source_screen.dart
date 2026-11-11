@@ -133,22 +133,11 @@ class _SourceScreenState extends State<SourceScreen> {
     );
   }
 
-  Future<void> _delete(SavedPlaylist playlist) async {
-    final confirmed = await showDialog<bool>(
-      context: context,
-      builder: (context) => AlertDialog(
-        title: Text(AppText.get('deletePlaylistTitle')),
-        content: Text(playlist.name),
-        actions: [
-          TextButton(onPressed: () => Navigator.pop(context, false), child: Text(AppText.get('cancel'))),
-          TextButton(onPressed: () => Navigator.pop(context, true), child: Text(AppText.get('delete'))),
-        ],
-      ),
-    );
-    if (confirmed != true) return;
-    await PlaylistContent.deleteLocalFile(playlist);
-    await _storage.deletePlaylist(playlist.id);
-    await _loadPlaylists();
+  Future<void> _edit(SavedPlaylist playlist) async {
+    final page = playlist.isXtream
+        ? LoginScreen(existing: playlist)
+        : M3uAddScreen(existing: playlist);
+    await _openAdd(page, reload: true);
   }
 
   void _showMessage(String text) {
@@ -157,10 +146,13 @@ class _SourceScreenState extends State<SourceScreen> {
 
   Future<void> _openAdd(Widget page, {bool reload = false}) async {
     dismissKeyboard();
-    await Navigator.push(context, MaterialPageRoute(builder: (context) => page));
+    final changed = await Navigator.push<bool>(
+      context,
+      MaterialPageRoute(builder: (context) => page),
+    );
     if (!mounted) return;
     dismissKeyboard();
-    if (reload) await _loadPlaylists();
+    if (reload || changed == true) await _loadPlaylists();
   }
 
   Future<void> _showAddSheet() async {
@@ -430,9 +422,9 @@ class _SourceScreenState extends State<SourceScreen> {
                                         ),
                                       ),
                                       IconButton(
-                                        tooltip: AppText.get('delete'),
-                                        onPressed: opening ? null : () => _delete(playlist),
-                                        icon: Icon(Icons.delete_outline, color: muted),
+                                        tooltip: AppText.get('edit'),
+                                        onPressed: opening ? null : () => _edit(playlist),
+                                        icon: Icon(Icons.edit_outlined, color: muted),
                                       ),
                                     ],
                                   ),

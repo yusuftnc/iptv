@@ -51,6 +51,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<Map<String, dynamic>> _latestChannels = [];
   List<WatchHistory> _lastWatchedMovies = [];
   List<WatchHistory> _lastWatchedSeries = [];
+  int _loadSeq = 0;
 
   @override
   void initState() {
@@ -98,14 +99,43 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     });
   }
 
-  Future<void> _loadContent() async {
-    try {
-      setState(() {
-        _isLoading = true;
-        _errorMessage = '';
-      });
+  bool _tabHasContent(int index) {
+    switch (index) {
+      case 0:
+        return _latestMovies.isNotEmpty ||
+            _latestSeries.isNotEmpty ||
+            _latestChannels.isNotEmpty ||
+            _lastWatchedMovies.isNotEmpty ||
+            _lastWatchedSeries.isNotEmpty;
+      case 1:
+        return _liveCategories.isNotEmpty;
+      case 2:
+        return _movieCategories.isNotEmpty;
+      case 3:
+        return _seriesCategories.isNotEmpty;
+      default:
+        return false;
+    }
+  }
 
-      switch (_currentIndex) {
+  Future<void> _loadContent() async {
+    final index = _currentIndex;
+    final seq = ++_loadSeq;
+    final showSpinner = !_tabHasContent(index);
+    try {
+      if (showSpinner) {
+        setState(() {
+          _isLoading = true;
+          _errorMessage = '';
+        });
+      } else if (_isLoading || _errorMessage.isNotEmpty) {
+        setState(() {
+          _isLoading = false;
+          _errorMessage = '';
+        });
+      }
+
+      switch (index) {
         case 0: // Yeniler
           _latestMovies = await _iptvService.getLatestMovies(limit: 30);
           _latestSeries = await _iptvService.getLatestSeries(limit: 30);
@@ -139,10 +169,12 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
           break;
       }
 
+      if (!mounted || seq != _loadSeq) return;
       setState(() {
         _isLoading = false;
       });
     } catch (e) {
+      if (!mounted || seq != _loadSeq) return;
       setState(() {
         _errorMessage = 'İçerik yüklenirken hata oluştu: ${e.toString()}';
         _isLoading = false;
@@ -150,8 +182,45 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
     }
   }
 
+  List<Map<String, dynamic>>? _cachedCategory(
+    String categoryId,
+    String categoryType,
+  ) {
+    switch (categoryType) {
+      case 'live':
+        final channels = _iptvService.freshChannels(categoryId);
+        if (channels == null) return null;
+        return List<Map<String, dynamic>>.from(channels);
+      case 'movie':
+        final movies = _iptvService.freshMovies();
+        if (movies == null) return null;
+        return movies
+            .where((movie) => movie['category_id']?.toString() == categoryId)
+            .toList();
+      case 'series':
+        final series = _iptvService.freshSeries();
+        if (series == null) return null;
+        return series
+            .where((serie) => serie['category_id']?.toString() == categoryId)
+            .toList();
+      default:
+        return null;
+    }
+  }
+
   Future<void> _loadCategoryContent(
       String categoryId, String categoryType) async {
+    final cached = _cachedCategory(categoryId, categoryType);
+    if (cached != null) {
+      if (!mounted) return;
+      setState(() {
+        _selectedCategoryContent = cached;
+        _isLoading = false;
+        _errorMessage = '';
+      });
+      return;
+    }
+
     try {
       setState(() {
         _isLoading = true;
@@ -162,7 +231,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
       switch (categoryType) {
         case 'live':
-          content = await _iptvService.getChannels(categoryId);
+          content = List<Map<String, dynamic>>.from(
+            await _iptvService.getChannels(categoryId),
+          );
           break;
         case 'movie':
           final allMovies = await _iptvService.getMovies();
@@ -207,6 +278,23 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         context,
         MaterialPageRoute(builder: (context) => const SourceScreen()),
       );
+    }
+  }
+
+  Future<void> _refreshContent() async {
+    final categoryId = _selectedCategoryId;
+    final categoryName = _selectedCategoryName;
+    final categoryType = _currentContentType;
+    _iptvService.dropCatalogCache();
+    if (!mounted) return;
+    setState(() {
+      _isLoading = true;
+      _errorMessage = '';
+    });
+    if (categoryName.isNotEmpty && categoryId.isNotEmpty) {
+      await _loadCategoryContent(categoryId, categoryType);
+    } else {
+      await _loadContent();
     }
   }
 
@@ -314,6 +402,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ),
                   onTap: () {
                     Navigator.pop(context);
+                    _logout();
                   },
                 ),
                 ListTile(
@@ -384,22 +473,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   ),
                   onTap: () {
                     Navigator.pop(context);
-                    _loadContent();
-                  },
-                ),
-                const Divider(color: Colors.grey),
-                ListTile(
-                  title: Text(
-                    'Çıkış Yap',
-                    style: TextStyle(color: context.palette.text),
-                  ),
-                  leading: Icon(
-                    Icons.logout,
-                    color: context.palette.text,
-                  ),
-                  onTap: () {
-                    Navigator.pop(context);
-                    _logout();
+                    unawaited(_refreshContent());
                   },
                 ),
               ],
@@ -827,15 +901,6 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         ),
       );
     }
-  }
-
-  void _showLogoutDialog() {
-    _showConfirmationDialog(
-      title: 'Çıkış Yap',
-      content: 'Hesabınızdan çıkış yapmak istediğinize emin misiniz?',
-      confirmText: 'Çıkış Yap',
-      onConfirm: _logout,
-    );
   }
 
   void _showExitDialog() {

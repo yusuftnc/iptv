@@ -45,15 +45,11 @@ class _PaywallScreenState extends State<PaywallScreen> {
           return ListView(
             padding: const EdgeInsets.fromLTRB(20, 24, 20, 32),
             children: [
-              if (_purchases.proFeatures)
+              if (_purchases.proFeatures || _purchases.noAds)
                 const _StatusCard(
                   title: 'Pro açık',
-                  body: 'Reklamlar kapalı. Pro özellikleri bu hesapta duruyor.',
-                )
-              else if (_purchases.noAds)
-                const _StatusCard(
-                  title: 'Reklamlar kapalı',
-                  body: 'Pro’ya geçmek istersen aşağıdaki yükseltme yeterli.',
+                  body:
+                      'Aboneliğin süresince reklamlar kapalı, Pro özellikler açık.',
                 ),
               if (_purchases.loadError != null) ...[
                 Text(
@@ -75,10 +71,11 @@ class _PaywallScreenState extends State<PaywallScreen> {
                 const SizedBox(height: 12),
               ],
               const SizedBox(height: 8),
-              TextButton(
-                onPressed: _busy ? null : () => _run(_purchases.restore),
-                child: const Text('Satın almaları geri yükle'),
-              ),
+              if (_purchases.configured)
+                TextButton(
+                  onPressed: _busy ? null : () => _run(_purchases.restore),
+                  child: const Text('Satın almaları geri yükle'),
+                ),
             ],
           );
         },
@@ -174,21 +171,15 @@ class _PackageCard extends StatelessWidget {
   }
 
   static ({String title, String body}) _copy(Package item) {
-    if (_is(item, PurchaseService.proLifetimePackage)) {
+    if (_is(item, PurchaseService.proYearlyPackage)) {
       return (
-        title: 'Pro',
-        body: 'Reklamlar kalkar. Pro özellikleri açılır.',
-      );
-    }
-    if (_is(item, PurchaseService.upgradePackage)) {
-      return (
-        title: 'Pro’ya yükselt',
-        body: 'Ödediğin reklam kaldırma ücretinin üstüne fark.',
+        title: 'Yıllık Pro',
+        body: 'Bir yıl reklamsız. Tüm Pro özellikler açık.',
       );
     }
     return (
-      title: 'Reklamları kaldır',
-      body: 'Reklamlar kalkar.',
+      title: 'Aylık Pro',
+      body: 'Her ay yenilenir. Reklamsız ve tüm Pro özellikler.',
     );
   }
 

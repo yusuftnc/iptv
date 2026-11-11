@@ -14,11 +14,11 @@ class PurchaseService extends ChangeNotifier {
 
   static const noAdsId = 'no_ads';
   static const proFeaturesId = 'pro_features';
-  static const removeAdsPackage = 'remove_ads';
-  static const proLifetimePackage = 'pro_lifetime';
-  static const upgradePackage = 'pro_upgrade_from_no_ads';
+  static const proMonthlyPackage = 'pro_monthly';
+  static const proYearlyPackage = 'pro_yearly';
 
   bool ready = false;
+  bool configured = false;
   bool noAds = false;
   bool proFeatures = false;
   List<Package> packages = const [];
@@ -39,13 +39,16 @@ class PurchaseService extends ChangeNotifier {
             ? 'RevenueCat test anahtarı yok'
             : 'Yayın anahtarı yok (${Platform.isIOS ? 'appl_' : 'goog_'})',
       );
-      loadError = 'Satın alma şu an açılamıyor.';
+      loadError = kDebugMode
+          ? 'Satın alma şu an açılamıyor.'
+          : 'Release’te mağaza anahtarı yok (goog_/appl_). Debug’da Test Store çalışır.';
       ready = true;
       notifyListeners();
       return;
     }
     try {
       await Purchases.configure(PurchasesConfiguration(apiKey));
+      configured = true;
       Purchases.addCustomerInfoUpdateListener(_apply);
       _apply(await Purchases.getCustomerInfo());
       final offerings = await Purchases.getOfferings();
@@ -59,6 +62,7 @@ class PurchaseService extends ChangeNotifier {
       loadError = packages.isEmpty ? 'Ürünler yüklenemedi.' : null;
     } catch (e, st) {
       Log.e('Purchase', e, st);
+      configured = false;
       loadError = 'Satın alma şu an açılamıyor.';
     }
     ready = true;
@@ -71,19 +75,19 @@ class PurchaseService extends ChangeNotifier {
     notifyListeners();
   }
 
-  /// Debug: Test Store (`test_`). Release ve profile: mağaza public anahtarı.
+  /// Önce mağaza public anahtarı (`goog_` / `appl_`). Yoksa debug'da Test Store (`test_`).
   /// Release'e `test_` verilirse SDK diyaloğu gösterip uygulamayı kapatır.
   String? _apiKey() {
-    if (kDebugMode) {
-      final test = Env.revenueCatTestApiKey.trim();
-      if (test.startsWith('test_')) return test;
-    }
     final live = (Platform.isIOS
             ? Env.revenueCatAppleApiKey
             : Env.revenueCatGoogleApiKey)
         .trim();
     final prefix = Platform.isIOS ? 'appl_' : 'goog_';
     if (live.startsWith(prefix)) return live;
+    if (kDebugMode) {
+      final test = Env.revenueCatTestApiKey.trim();
+      if (test.startsWith('test_')) return test;
+    }
     return null;
   }
 
@@ -96,20 +100,19 @@ class PurchaseService extends ChangeNotifier {
     return null;
   }
 
-  /// Başta reklam kaldırma ve Pro. Yükseltme yalnız reklamı kaldırmış kişiye.
+  /// Aylık ve yıllık Pro. İkisi de süresince reklamsız + tüm Pro özellikleri.
   List<Package> get visiblePackages {
-    if (proFeatures) return const [];
-    if (noAds) {
-      final upgrade = package(upgradePackage);
-      return upgrade == null ? const [] : [upgrade];
-    }
+    if (noAds || proFeatures) return const [];
     return [
-      for (final id in [removeAdsPackage, proLifetimePackage])
+      for (final id in [proMonthlyPackage, proYearlyPackage])
         if (package(id) case final item?) item,
     ];
   }
 
   Future<String?> buy(Package item) async {
+    if (!configured) {
+      return loadError ?? 'Satın alma şu an açılamıyor.';
+    }
     try {
       final result = await Purchases.purchase(PurchaseParams.package(item));
       _apply(result.customerInfo);
@@ -120,15 +123,22 @@ class PurchaseService extends ChangeNotifier {
         return null;
       }
       return e.message ?? 'Satın alma tamamlanamadı.';
+    } catch (e) {
+      return e.toString();
     }
   }
 
   Future<String?> restore() async {
+    if (!configured) {
+      return loadError ?? 'Satın alma şu an açılamıyor.';
+    }
     try {
       _apply(await Purchases.restorePurchases());
       return null;
     } on PlatformException catch (e) {
       return e.message ?? 'Geri yükleme tamamlanamadı.';
+    } catch (e) {
+      return e.toString();
     }
   }
 }
