@@ -5,6 +5,7 @@ import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
 import '../models/saved_playlist.dart';
+import '../widgets/app_loading_gate.dart';
 import 'm3u_parser.dart';
 
 class PlaylistContent {
@@ -36,11 +37,13 @@ class PlaylistContent {
 
   static Future<bool> looksLikeMedia(String url) async {
     try {
-      final response = await http
-          .head(Uri.parse(url), headers: const {'User-Agent': 'SUTU Player'})
-          .timeout(const Duration(seconds: 15));
-      final type = (response.headers['content-type'] ?? '').toLowerCase();
-      return type.startsWith('video/') || type.startsWith('audio/');
+      return await AppLoadingGate.whileBusy(() async {
+        final response = await http
+            .head(Uri.parse(url), headers: const {'User-Agent': 'SUTU Player'})
+            .timeout(const Duration(seconds: 15));
+        final type = (response.headers['content-type'] ?? '').toLowerCase();
+        return type.startsWith('video/') || type.startsWith('audio/');
+      });
     } catch (_) {
       return false;
     }
@@ -90,12 +93,14 @@ class PlaylistContent {
   }
 
   static Future<String> _download(String url) async {
-    final response = await http
-        .get(
-          Uri.parse(url),
-          headers: const {'User-Agent': 'SUTU Player'},
-        )
-        .timeout(const Duration(seconds: 20));
+    final response = await AppLoadingGate.whileBusy(
+      () => http
+          .get(
+            Uri.parse(url),
+            headers: const {'User-Agent': 'SUTU Player'},
+          )
+          .timeout(const Duration(seconds: 20)),
+    );
     if (response.statusCode != 200) {
       throw StateError('Liste alınamadı (${response.statusCode})');
     }

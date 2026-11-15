@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import '../models/discover_title.dart';
 import '../services/app_settings.dart';
 import '../services/discover_service.dart';
+import '../widgets/brand_pulse_logo.dart';
 import 'login_screen.dart';
 
 class DiscoverScreen extends StatefulWidget {
@@ -86,7 +87,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: BrandPulseLogo(size: 64))
           : _errorMessage.isNotEmpty
               ? Center(
                   child: Padding(
@@ -188,7 +189,7 @@ class _DiscoverScreenState extends State<DiscoverScreen> {
                     imageUrl: poster,
                     fit: BoxFit.cover,
                     placeholder: (context, url) =>
-                        const Center(child: CircularProgressIndicator()),
+                        Container(color: Colors.grey[800]),
                     errorWidget: (context, url, error) =>
                         Container(color: Colors.grey[800], child: iconWidget),
                   )
@@ -248,9 +249,9 @@ class _DiscoverDetailsScreen extends StatelessWidget {
                   ? CachedNetworkImage(
                       imageUrl: cover,
                       fit: BoxFit.contain,
-                      placeholder: (context, url) => const SizedBox(
+                      placeholder: (context, url) => SizedBox(
                         height: 250,
-                        child: Center(child: CircularProgressIndicator()),
+                        child: Container(color: Colors.grey[900]),
                       ),
                       errorWidget: (context, url, error) => const SizedBox(
                         height: 250,

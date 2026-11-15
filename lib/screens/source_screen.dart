@@ -384,18 +384,9 @@ class _SourceScreenState extends State<SourceScreen> {
                                         width: 36,
                                         height: 36,
                                         child: Center(
-                                          child: opening
-                                              ? SizedBox(
-                                                  width: 22,
-                                                  height: 22,
-                                                  child: CircularProgressIndicator(
-                                                    strokeWidth: 2,
-                                                    color: accent,
-                                                  ),
-                                                )
-                                              : playlist.isXtream
-                                                  ? Icon(Icons.dns_outlined, color: accent, size: 26)
-                                                  : _M3uMark(color: accent, size: 26),
+                                          child: playlist.isXtream
+                                              ? Icon(Icons.dns_outlined, color: accent, size: 26)
+                                              : _M3uMark(color: accent, size: 26),
                                         ),
                                       ),
                                       const SizedBox(width: 12),

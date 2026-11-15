@@ -124,9 +124,9 @@ class _SeriesInfoDetailsScreenState extends State<SeriesInfoDetailsScreen>
                 child: CachedNetworkImage(
                   imageUrl: widget.coverUrl,
                   fit: BoxFit.contain,
-                  placeholder: (context, url) => const SizedBox(
+                  placeholder: (context, url) => SizedBox(
                     height: 250,
-                    child: Center(child: CircularProgressIndicator()),
+                    child: Container(color: Colors.grey[900]),
                   ),
                   errorWidget: (context, url, error) => const SizedBox(
                     height: 250,

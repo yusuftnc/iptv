@@ -8,6 +8,7 @@ import '../services/database_service.dart';
 import 'player_screen.dart';
 import 'series_detail_screen.dart';
 import '../services/iptv_service.dart';
+import '../widgets/brand_pulse_logo.dart';
 
 class FavoritesScreen extends StatefulWidget {
   const FavoritesScreen({super.key});
@@ -203,9 +204,8 @@ class _FavoritesScreenState extends State<FavoritesScreen>
                         ? CachedNetworkImage(
                             imageUrl: iconUrl,
                             fit: BoxFit.cover,
-                            placeholder: (context, url) => const Center(
-                              child: CircularProgressIndicator(),
-                            ),
+                            placeholder: (context, url) =>
+                                Container(color: context.palette.placeholder),
                             errorWidget: (context, url, error) => const Icon(
                               Icons.error_outline,
                               color: Colors.red,
@@ -249,7 +249,7 @@ class _FavoritesScreenState extends State<FavoritesScreen>
         backgroundColor: context.accent,
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: BrandPulseLogo(size: 64))
           : RefreshIndicator(
               color: context.accent,
               onRefresh: () =>

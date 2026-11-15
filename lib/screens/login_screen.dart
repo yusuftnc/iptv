@@ -5,6 +5,7 @@ import '../services/cloud_sync_service.dart';
 import '../services/iptv_service.dart';
 import '../services/playlist_content.dart';
 import '../services/storage_service.dart';
+import '../widgets/brand_pulse_logo.dart';
 import 'home_screen.dart';
 
 class LoginScreen extends StatefulWidget {
@@ -359,14 +360,7 @@ class _LoginScreenState extends State<LoginScreen> {
                 onPressed: _isLoading || !_canSubmit ? null : _login,
                 style: context.primaryButtonStyle,
                 child: _isLoading
-                    ? const SizedBox(
-                        height: 22,
-                        width: 22,
-                        child: CircularProgressIndicator(
-                          strokeWidth: 2,
-                          color: Colors.white,
-                        ),
-                      )
+                    ? const BrandPulseLogo(size: 28)
                     : Text(
                         AppText.get(_isEditing ? 'save' : 'login'),
                         style: const TextStyle(fontSize: buttonFontSize),

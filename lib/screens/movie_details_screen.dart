@@ -145,9 +145,9 @@ class _MovieDetailsScreenState extends State<MovieDetailsScreen>
               child: CachedNetworkImage(
                 imageUrl: widget.movieDetails.coverUrl,
                 fit: BoxFit.contain, // kırpmadan göster
-                placeholder: (context, url) => const SizedBox(
+                placeholder: (context, url) => SizedBox(
                   height: 250,
-                  child: Center(child: CircularProgressIndicator()),
+                  child: Container(color: Colors.grey[900]),
                 ),
                 errorWidget: (context, url, error) => const SizedBox(
                   height: 250,

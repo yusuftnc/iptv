@@ -16,6 +16,7 @@ import '../services/purchase_service.dart';
 import 'paywall_screen.dart';
 import 'package:flutter_chrome_cast/entities.dart';
 import 'package:flutter_chrome_cast/enums.dart';
+import '../widgets/brand_pulse_logo.dart';
 import '../widgets/cast_device_picker.dart';
 import 'dart:async';
 import 'dart:io' show Platform;
@@ -2114,13 +2115,11 @@ class _PlayerScreenState extends State<PlayerScreen> {
         child: Column(
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
-            CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(context.accent),
-            ),
-            SizedBox(height: 16),
+            const BrandPulseLogo(size: 72),
+            const SizedBox(height: 16),
             Text(
               _loadingLabel,
-              style: TextStyle(color: Colors.white),
+              style: const TextStyle(color: Colors.white),
             ),
           ],
         ),
@@ -2185,7 +2184,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             controller: _controller!,
             aspectRatio: 16 / 9,
             placeholder: const Center(
-              child: CircularProgressIndicator(),
+              child: BrandPulseLogo(size: 64),
             ),
           ),
         ),
@@ -2197,7 +2196,7 @@ class _PlayerScreenState extends State<PlayerScreen> {
             child: Column(
               mainAxisSize: MainAxisSize.min,
               children: [
-                const CircularProgressIndicator(color: Colors.white),
+                const BrandPulseLogo(size: 72),
                 const SizedBox(height: 16),
                 Text(
                   _loadingLabel,

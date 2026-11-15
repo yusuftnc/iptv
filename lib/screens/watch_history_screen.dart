@@ -7,6 +7,7 @@ import '../services/database_service.dart';
 import 'player_screen.dart';
 import 'series_detail_screen.dart';
 import '../services/iptv_service.dart';
+import '../widgets/brand_pulse_logo.dart';
 
 class WatchHistoryScreen extends StatefulWidget {
   const WatchHistoryScreen({super.key});
@@ -230,7 +231,7 @@ class _WatchHistoryScreenState extends State<WatchHistoryScreen>
         ],
       ),
       body: _isLoading
-          ? const Center(child: CircularProgressIndicator())
+          ? const Center(child: BrandPulseLogo(size: 64))
           : RefreshIndicator(
               color: context.accent,
               onRefresh: () =>

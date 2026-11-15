@@ -379,12 +379,9 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
   }
 
   Widget _buildBody() {
+    // HTTP sırasında AppLoadingGate var; mavi spinner binmesin.
     if (_isLoading) {
-      return Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(context.accent),
-        ),
-      );
+      return const SizedBox.shrink();
     }
 
     if (_errorMessage.isNotEmpty) {
@@ -487,9 +484,6 @@ class _SeriesDetailScreenState extends State<SeriesDetailScreen>
                           width: 120,
                           height: 180,
                           color: Colors.grey[800],
-                          child: const Center(
-                            child: CircularProgressIndicator(),
-                          ),
                         ),
                         errorWidget: (context, url, error) => Container(
                           width: 120,

@@ -9,6 +9,7 @@ import '../services/app_settings.dart';
 import '../services/m3u_parser.dart';
 import '../services/playlist_content.dart';
 import '../services/storage_service.dart';
+import '../widgets/brand_pulse_logo.dart';
 import 'm3u_list_screen.dart';
 import 'player_screen.dart';
 
@@ -389,14 +390,9 @@ class _M3uAddScreenState extends State<M3uAddScreen> {
             FilledButton(
               onPressed: _canSave ? _save : null,
               style: context.primaryButtonStyle,
-              child: _busy
-                  ? const SizedBox(
-                      height: 22,
-                      width: 22,
-                      child: CircularProgressIndicator(
-                          strokeWidth: 2, color: Colors.white),
-                    )
-                  : Text(
+            child: _busy
+                ? const BrandPulseLogo(size: 28)
+                : Text(
                       AppText.get(_isEditing
                           ? 'save'
                           : (_fromFile ? 'add' : 'open')),

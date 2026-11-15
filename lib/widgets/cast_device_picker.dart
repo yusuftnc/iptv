@@ -8,6 +8,7 @@ import 'package:flutter_vlc_player/flutter_vlc_player.dart';
 import '../models/cast_pick_result.dart';
 import '../services/cast_service.dart';
 import '../utils/logger.dart';
+import 'brand_pulse_logo.dart';
 
 class VlcRendererPick {
   final String id;
@@ -168,7 +169,7 @@ Widget _buildDeviceList(CastService cast) {
           child: Column(
             mainAxisAlignment: MainAxisAlignment.center,
             children: [
-              CircularProgressIndicator(),
+              BrandPulseLogo(size: 56),
               SizedBox(height: 16),
               Text(
                 'Cihazlar aranıyor…',
@@ -366,7 +367,7 @@ class _VlcRendererPickerBodyState extends State<_VlcRendererPickerBody> {
                     child: Column(
                       mainAxisAlignment: MainAxisAlignment.center,
                       children: [
-                        CircularProgressIndicator(),
+                        BrandPulseLogo(size: 56),
                         SizedBox(height: 16),
                         Text(
                           'Cihazlar aranıyor…',

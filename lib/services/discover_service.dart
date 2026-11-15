@@ -4,6 +4,7 @@ import 'package:flutter/services.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/discover_title.dart';
+import '../widgets/app_loading_gate.dart';
 
 class DiscoverService {
   static const _moviesUrl = 'https://api.anyplay.stream/v1/movies';
@@ -32,7 +33,9 @@ class DiscoverService {
   }
 
   Future<String> _fetchRemote(String url) async {
-    final response = await http.get(Uri.parse(url)).timeout(const Duration(seconds: 20));
+    final response = await AppLoadingGate.whileBusy(
+      () => http.get(Uri.parse(url)).timeout(const Duration(seconds: 20)),
+    );
     if (response.statusCode != 200) {
       throw StateError('Liste alınamadı (${response.statusCode})');
     }

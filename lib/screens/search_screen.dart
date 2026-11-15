@@ -422,11 +422,7 @@ class _SearchScreenState extends State<SearchScreen> {
           // İçerik alanı
           Expanded(
             child: _isLoading
-                ? Center(
-                    child: CircularProgressIndicator(
-                      valueColor: AlwaysStoppedAnimation<Color>(context.accent),
-                    ),
-                  )
+                ? const SizedBox.shrink()
                 : _errorMessage.isNotEmpty
                     ? Center(
                         child: Column(
@@ -716,9 +712,8 @@ class _SearchScreenState extends State<SearchScreen> {
                   CachedNetworkImage(
                     imageUrl: iconUrl,
                     fit: BoxFit.cover,
-                    placeholder: (context, url) => const Center(
-                      child: CircularProgressIndicator(),
-                    ),
+                    placeholder: (context, url) =>
+                        Container(color: Colors.grey[800]),
                     errorWidget: (context, url, error) => Container(
                       color: Colors.grey[800],
                       child: iconWidget,

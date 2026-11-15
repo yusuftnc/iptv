@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:hive_flutter/hive_flutter.dart';
+import 'app_navigator.dart';
 import 'screens/splash_screen.dart';
 import 'models/favorite_item.dart';
 import 'models/watch_history.dart';
@@ -8,6 +9,7 @@ import 'models/user_settings.dart';
 import 'services/app_settings.dart';
 import 'services/purchase_service.dart';
 import 'services/ads_service.dart';
+import 'widgets/app_loading_gate.dart';
 
 void main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -46,6 +48,7 @@ class MyApp extends StatelessWidget {
       builder: (context, _) {
         final dark = AppSettings.instance.darkMode;
         return MaterialApp(
+          navigatorKey: appNavigatorKey,
           title: 'SUTU Player',
           themeMode: dark ? ThemeMode.dark : ThemeMode.light,
           theme: ThemeData(
@@ -86,7 +89,9 @@ class MyApp extends StatelessWidget {
           builder: (context, child) {
             return AppSettingsScope(
               settings: AppSettings.instance,
-              child: child ?? const SizedBox.shrink(),
+              child: AppLoadingOverlay(
+                child: child ?? const SizedBox.shrink(),
+              ),
             );
           },
           home: const SplashScreen(),

@@ -1,11 +1,11 @@
 import 'package:flutter/material.dart';
 import '../models/saved_playlist.dart';
-import '../services/app_settings.dart';
 import '../services/cloud_sync_service.dart';
 import '../services/iptv_service.dart';
 import '../services/m3u_parser.dart';
 import '../services/playlist_content.dart';
 import '../services/storage_service.dart';
+import '../widgets/brand_loading_curtain.dart';
 import 'home_screen.dart';
 import 'm3u_list_screen.dart';
 import 'player_screen.dart';
@@ -24,12 +24,12 @@ class _SplashScreenState extends State<SplashScreen> {
     super.initState();
     _checkLoginStatus();
   }
-  
+
   Future<void> _checkLoginStatus() async {
     await Future.delayed(const Duration(seconds: 2));
-    
+
     if (!mounted) return;
-    
+
     final storage = StorageService();
     SavedPlaylist? active;
     try {
@@ -123,33 +123,8 @@ class _SplashScreenState extends State<SplashScreen> {
 
   @override
   Widget build(BuildContext context) {
-    return Scaffold(
-      backgroundColor: context.palette.background,
-      body: Center(
-        child: Column(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            Icon(
-              Icons.tv,
-              size: 100,
-              color: context.accent,
-            ),
-            const SizedBox(height: 20),
-            Text(
-              'SUTU Player',
-              style: TextStyle(
-                color: context.palette.text,
-                fontSize: 24,
-                fontWeight: FontWeight.bold,
-              ),
-            ),
-            const SizedBox(height: 30),
-            CircularProgressIndicator(
-              valueColor: AlwaysStoppedAnimation<Color>(context.accent),
-            ),
-          ],
-        ),
-      ),
+    return const Scaffold(
+      body: BrandLoadingCurtain(opaque: true),
     );
   }
 }

@@ -24,6 +24,9 @@ class PurchaseService extends ChangeNotifier {
   List<Package> packages = const [];
   String? loadError;
 
+  /// Drawer'daki gizli long-press ile açılır; mağaza anahtarı / entitlement aramaz.
+  bool _localUnlock = false;
+
   Future<void> start() async {
     if (kIsWeb || !(Platform.isIOS || Platform.isAndroid)) {
       loadError = 'Satın alma telefonda açılır. Mac uygulamasında ürün çıkmaz.';
@@ -70,8 +73,23 @@ class PurchaseService extends ChangeNotifier {
   }
 
   void _apply(CustomerInfo info) {
+    if (_localUnlock) {
+      noAds = true;
+      proFeatures = true;
+      notifyListeners();
+      return;
+    }
     noAds = info.entitlements.active.containsKey(noAdsId);
     proFeatures = info.entitlements.active.containsKey(proFeaturesId);
+    notifyListeners();
+  }
+
+  /// Anahtar / satın alma olmadan Pro + reklamsız. Oturum boyunca kalır.
+  void unlockEverythingLocally() {
+    if (_localUnlock && noAds && proFeatures) return;
+    _localUnlock = true;
+    noAds = true;
+    proFeatures = true;
     notifyListeners();
   }
 

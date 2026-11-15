@@ -3,6 +3,7 @@ import 'package:purchases_flutter/purchases_flutter.dart';
 
 import '../services/app_settings.dart';
 import '../services/purchase_service.dart';
+import '../widgets/brand_pulse_logo.dart';
 
 class PaywallScreen extends StatefulWidget {
   const PaywallScreen({super.key});
@@ -39,7 +40,7 @@ class _PaywallScreenState extends State<PaywallScreen> {
         listenable: _purchases,
         builder: (context, _) {
           if (!_purchases.ready) {
-            return const Center(child: CircularProgressIndicator());
+            return const Center(child: BrandPulseLogo(size: 64));
           }
           final packages = _purchases.visiblePackages;
           return ListView(

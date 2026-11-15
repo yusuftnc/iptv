@@ -1,3 +1,6 @@
+## 7.4.4
+* [Android] libvlc-all 3.6.0-eap14 → 3.6.3 (16 KB PAGE_SIZE; upstream 7.4.4 ile aynı bağımlılık)
+
 ## 7.4.3
 * Bumped minimum Flutter SDK requirement to 3.22.0 and Dart SDK requirement to 3.4.0. The minimum supported Android version is now 5.0 (API level 21)
 * [Android] updated libvlc

@@ -17,10 +17,13 @@ import 'search_screen.dart';
 import 'favorites_screen.dart';
 import 'watch_history_screen.dart';
 import 'paywall_screen.dart';
+import '../widgets/app_loading_gate.dart';
 import '../widgets/banner_ad_slot.dart';
+import '../widgets/brand_loading_curtain.dart';
 import 'movie_details_screen.dart';
 import '../models/watch_history.dart';
 import '../services/database_service.dart';
+import '../services/purchase_service.dart';
 
 class HomeScreen extends StatefulWidget {
   const HomeScreen({super.key});
@@ -52,6 +55,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   List<WatchHistory> _lastWatchedMovies = [];
   List<WatchHistory> _lastWatchedSeries = [];
   int _loadSeq = 0;
+  Timer? _proUnlockHoldTimer;
 
   @override
   void initState() {
@@ -63,9 +67,28 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _proUnlockHoldTimer?.cancel();
     WidgetsBinding.instance.removeObserver(this);
     CloudSyncService.instance.revision.removeListener(_onCloudRevision);
     super.dispose();
+  }
+
+  void _cancelProUnlockHold() {
+    _proUnlockHoldTimer?.cancel();
+    _proUnlockHoldTimer = null;
+  }
+
+  void _startProUnlockHold() {
+    _cancelProUnlockHold();
+    _proUnlockHoldTimer = Timer(const Duration(seconds: 5), () {
+      _proUnlockHoldTimer = null;
+      PurchaseService.instance.unlockEverythingLocally();
+      HapticFeedback.mediumImpact();
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Pro açıldı')),
+      );
+    });
   }
 
   @override
@@ -135,39 +158,35 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
         });
       }
 
-      switch (index) {
-        case 0: // Yeniler
-          _latestMovies = await _iptvService.getLatestMovies(limit: 30);
-          _latestSeries = await _iptvService.getLatestSeries(limit: 30);
-          _latestChannels = await _iptvService.getLatestChannels(limit: 10);
-          final db = DatabaseService();
-          _lastWatchedMovies = await db.getLastWatched('movie', limit: 10);
-          _lastWatchedSeries = await db.getLastWatched('series', limit: 10);
-          unawaited(_reloadContinueWatching(fromCloud: true));
-
-          break;
-        case 1: // TV Kanalları
-          _currentContentType = 'live';
-          final categories = await _iptvService.getLiveCategories();
-          setState(() {
+      // Tek perde: sıralı katalog + parse + sort bitene kadar.
+      await AppLoadingGate.whileBusy(() async {
+        switch (index) {
+          case 0: // Yeniler
+            _latestMovies = await _iptvService.getLatestMovies(limit: 30);
+            _latestSeries = await _iptvService.getLatestSeries(limit: 30);
+            _latestChannels = await _iptvService.getLatestChannels(limit: 10);
+            final db = DatabaseService();
+            _lastWatchedMovies = await db.getLastWatched('movie', limit: 10);
+            _lastWatchedSeries = await db.getLastWatched('series', limit: 10);
+            unawaited(_reloadContinueWatching(fromCloud: true));
+            break;
+          case 1: // TV Kanalları
+            _currentContentType = 'live';
+            final categories = await _iptvService.getLiveCategories();
             _liveCategories = categories;
-          });
-          break;
-        case 2: // Filmler
-          _currentContentType = 'movie';
-          final categories = await _iptvService.getMovieCategories();
-          setState(() {
+            break;
+          case 2: // Filmler
+            _currentContentType = 'movie';
+            final categories = await _iptvService.getMovieCategories();
             _movieCategories = categories;
-          });
-          break;
-        case 3: // Diziler
-          _currentContentType = 'series';
-          final categories = await _iptvService.getSeriesCategories();
-          setState(() {
+            break;
+          case 3: // Diziler
+            _currentContentType = 'series';
+            final categories = await _iptvService.getSeriesCategories();
             _seriesCategories = categories;
-          });
-          break;
-      }
+            break;
+        }
+      });
 
       if (!mounted || seq != _loadSeq) return;
       setState(() {
@@ -373,11 +392,17 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      const Text(
-                        'SUTU Player',
-                        style: TextStyle(
-                          color: Colors.white,
-                          fontSize: 24,
+                      Listener(
+                        behavior: HitTestBehavior.opaque,
+                        onPointerDown: (_) => _startProUnlockHold(),
+                        onPointerUp: (_) => _cancelProUnlockHold(),
+                        onPointerCancel: (_) => _cancelProUnlockHold(),
+                        child: const Text(
+                          'SUTU Player',
+                          style: TextStyle(
+                            color: Colors.white,
+                            fontSize: 24,
+                          ),
                         ),
                       ),
                       const SizedBox(height: 10),
@@ -526,12 +551,9 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
   }
 
   Widget _buildBody() {
+    // Gate HTTP+parse bitmeden inebilir; o sırada siyah boşluk olmasın.
     if (_isLoading) {
-      return Center(
-        child: CircularProgressIndicator(
-          valueColor: AlwaysStoppedAnimation<Color>(context.accent),
-        ),
-      );
+      return const BrandLoadingCurtain(opaque: true);
     }
 
     if (_errorMessage.isNotEmpty) {
@@ -794,10 +816,8 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                       cacheKey: contentItem.streamIcon,
                       maxHeightDiskCache: 450,
                       maxWidthDiskCache: 300,
-                      placeholder: (context, url) => Container(
-                        color: context.palette.card,
-                        child: const Center(child: CircularProgressIndicator()),
-                      ),
+                      placeholder: (context, url) =>
+                          Container(color: context.palette.card),
                       errorWidget: (context, url, error) => Container(
                         color: context.palette.card,
                         child: Icon(
@@ -1112,7 +1132,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                     imageUrl: iconUrl,
                     fit: BoxFit.cover,
                     placeholder: (context, url) =>
-                        const Center(child: CircularProgressIndicator()),
+                        Container(color: context.palette.placeholder),
                     errorWidget: (context, url, error) =>
                         Container(color: context.palette.placeholder, child: iconWidget),
                   )
@@ -1257,7 +1277,7 @@ class _HomeScreenState extends State<HomeScreen> with WidgetsBindingObserver {
                 imageUrl: iconUrl,
                 fit: BoxFit.cover,
                 placeholder: (_, __) =>
-                    const Center(child: CircularProgressIndicator()),
+                    Container(color: context.palette.placeholder),
                 errorWidget: (_, __, ___) =>
                     Container(color: context.palette.placeholder, child: iconWidget),
               )

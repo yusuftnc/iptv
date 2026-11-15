@@ -5,6 +5,7 @@ import 'package:dio/dio.dart';
 import '../models/movie_details.dart';
 import 'package:flutter/foundation.dart';
 import '../utils/logger.dart';
+import '../widgets/app_loading_gate.dart';
 
 class IptvService {
   String? _host;
@@ -79,6 +80,16 @@ class IptvService {
         sendTimeout: const Duration(seconds: 30),
       ),
     );
+    // Loading perde: Dio interceptor değil whileBusy — push/pop kayması olmasın.
+  }
+
+  /// Ham GET. Perde yok — çağıran parse bitene kadar [AppLoadingGate.whileBusy] sarmalı.
+  Future<http.Response> _httpGet(
+    Uri uri, {
+    Map<String, String>? headers,
+    Duration timeout = const Duration(seconds: 30),
+  }) {
+    return http.get(uri, headers: headers).timeout(timeout);
   }
 
   // Getter metodları
@@ -182,7 +193,8 @@ class IptvService {
     if (running != null) return running;
 
     final epoch = _catalogEpoch;
-    final future = () async {
+    // HTTP + json.decode + map — hepsi bitmeden perde inmesin (büyük katalog).
+    final future = AppLoadingGate.whileBusy(() async {
       try {
         final items = await load();
         if (epoch == _catalogEpoch) {
@@ -199,7 +211,7 @@ class IptvService {
       } finally {
         if (epoch == _catalogEpoch) _catalogInflight.remove(key);
       }
-    }();
+    });
     _catalogInflight[key] = future;
     return future;
   }
@@ -236,7 +248,7 @@ class IptvService {
         },
       );
 
-      final response = await http.get(uri).timeout(const Duration(seconds: 30));
+      final response = await _httpGet(uri);
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -257,7 +269,7 @@ class IptvService {
         },
       );
 
-      final response = await http.get(uri).timeout(const Duration(seconds: 30));
+      final response = await _httpGet(uri);
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -278,7 +290,7 @@ class IptvService {
         },
       );
 
-      final response = await http.get(uri).timeout(const Duration(seconds: 30));
+      final response = await _httpGet(uri);
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -291,14 +303,19 @@ class IptvService {
   Future<bool> login() async {
     try {
       Log.d('DBG', 'Debug - Attempting login with URL: $_serverUrl');
-      final response = await _dio.get(
-        '$_serverUrl/player_api.php',
-        queryParameters: {'username': _username, 'password': _password},
-        options: Options(
-          headers: {'User-Agent': 'Mozilla/5.0', 'Accept': 'application/json'},
-          validateStatus: (status) => status! < 500,
-          receiveTimeout: const Duration(seconds: 30),
-          sendTimeout: const Duration(seconds: 30),
+      final response = await AppLoadingGate.whileBusy(
+        () => _dio.get(
+          '$_serverUrl/player_api.php',
+          queryParameters: {'username': _username, 'password': _password},
+          options: Options(
+            headers: {
+              'User-Agent': 'Mozilla/5.0',
+              'Accept': 'application/json',
+            },
+            validateStatus: (status) => status! < 500,
+            receiveTimeout: const Duration(seconds: 30),
+            sendTimeout: const Duration(seconds: 30),
+          ),
         ),
       );
 
@@ -370,7 +387,7 @@ class IptvService {
       );
 
       Log.d('DBG', 'Debug - Request URL: ${uri.toString()}');
-      final response = await http.get(uri).timeout(const Duration(seconds: 30));
+      final response = await _httpGet(uri);
       Log.d('DBG', 'Debug - Response status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
@@ -403,6 +420,16 @@ class IptvService {
       throw Exception('IptvService not initialized');
     }
 
+    // Format yoklamaları tek perde altında; ara pop ile yanıp sönmesin.
+    return AppLoadingGate.whileBusy(
+      () => _resolveStreamUrl(streamId: streamId, streamType: streamType),
+    );
+  }
+
+  Future<String?> _resolveStreamUrl({
+    required String streamId,
+    required String streamType,
+  }) async {
     // Önbellekte bu tür için çalışan bir format var mı?
     if (_formatCache.containsKey(streamType)) {
       final formatTemplate = _formatCache[streamType]!;
@@ -598,7 +625,7 @@ class IptvService {
         },
       );
 
-      final response = await http.get(uri).timeout(const Duration(seconds: 30));
+      final response = await _httpGet(uri);
 
       if (response.statusCode == 200) {
         final List<dynamic> data = json.decode(response.body);
@@ -621,7 +648,7 @@ class IptvService {
       );
 
       Log.d('DBG', 'Debug - Request URL: ${uri.toString()}');
-      final response = await http.get(uri).timeout(const Duration(seconds: 30));
+      final response = await _httpGet(uri);
       Log.d('DBG', 'Debug - Response status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
@@ -645,7 +672,7 @@ class IptvService {
       );
 
       Log.d('DBG', 'Debug - Request URL: ${uri.toString()}');
-      final response = await http.get(uri).timeout(const Duration(seconds: 30));
+      final response = await _httpGet(uri);
       Log.d('DBG', 'Debug - Response status: ${response.statusCode}');
 
       if (response.statusCode == 200) {
@@ -663,14 +690,16 @@ class IptvService {
         throw Exception('User not logged in');
       }
 
-      final response = await _dio.get(
-        '$_serverUrl/player_api.php',
-        queryParameters: {
-          'username': _username,
-          'password': _password,
-          'action': 'get_series_info',
-          'series_id': seriesId,
-        },
+      final response = await AppLoadingGate.whileBusy(
+        () => _dio.get(
+          '$_serverUrl/player_api.php',
+          queryParameters: {
+            'username': _username,
+            'password': _password,
+            'action': 'get_series_info',
+            'series_id': seriesId,
+          },
+        ),
       );
 
       Log.d("DBG", 'Debug - Response status: ${response.statusCode}');
@@ -721,79 +750,83 @@ class IptvService {
 
   // Film detaylarını getir
   Future<MovieDetails> getMovieInfo(String movieId) async {
-    final url = Uri.parse('$_serverUrl/player_api.php');
-    final response = await http.get(
-      url.replace(
-        queryParameters: {
-          'username': _username,
-          'password': _password,
-          'action': 'get_vod_info',
-          'vod_id': movieId,
-        },
-      ),
-    );
+    return AppLoadingGate.whileBusy(() async {
+      final url = Uri.parse('$_serverUrl/player_api.php');
+      final response = await _httpGet(
+        url.replace(
+          queryParameters: {
+            'username': _username,
+            'password': _password,
+            'action': 'get_vod_info',
+            'vod_id': movieId,
+          },
+        ),
+      );
 
-    if (response.statusCode == 200) {
-      final data = json.decode(response.body);
-      return MovieDetails.fromJson(data);
-    } else {
-      throw Exception('Film bilgileri alınamadı');
-    }
+      if (response.statusCode == 200) {
+        final data = json.decode(response.body);
+        return MovieDetails.fromJson(data);
+      } else {
+        throw Exception('Film bilgileri alınamadı');
+      }
+    });
   }
 
   // Dizi bölümlerini getir
   Future<Map<String, List<Map<String, dynamic>>>> getSeriesEpisodes(
     String seriesId,
   ) async {
-    try {
-      if (kDebugMode)
-        Log.d("DBG", 'Debug - Getting episodes for series ID: $seriesId');
-      final uri = Uri.parse('$_serverUrl/player_api.php').replace(
-        queryParameters: {
-          'username': _username,
-          'password': _password,
-          'action': 'get_series_info',
-          'series_id': seriesId,
-        },
-      );
-
-      if (kDebugMode)
-        Log.d(
-          "DBG",
-          'Debug - Request URL: ${uri.toString().replaceAll(_password!, '****')}',
+    return AppLoadingGate.whileBusy(() async {
+      try {
+        if (kDebugMode)
+          Log.d("DBG", 'Debug - Getting episodes for series ID: $seriesId');
+        final uri = Uri.parse('$_serverUrl/player_api.php').replace(
+          queryParameters: {
+            'username': _username,
+            'password': _password,
+            'action': 'get_series_info',
+            'series_id': seriesId,
+          },
         );
-      final response = await http.get(uri).timeout(const Duration(seconds: 30));
-      Log.d('DBG', 'Debug - Response status: ${response.statusCode}');
-      Log.d('DBG', 'Debug - Response headers: ${response.headers}');
-      Log.d('DBG', 'Debug - Response body: ${response.body}');
 
-      if (response.statusCode == 200) {
-        final data = json.decode(response.body);
-        if (data is Map<String, dynamic> && data['episodes'] != null) {
-          final episodes = data['episodes'] as Map<String, dynamic>;
-          final result = <String, List<Map<String, dynamic>>>{};
+        if (kDebugMode)
+          Log.d(
+            "DBG",
+            'Debug - Request URL: ${uri.toString().replaceAll(_password!, '****')}',
+          );
+        final response = await _httpGet(uri);
+        Log.d('DBG', 'Debug - Response status: ${response.statusCode}');
+        Log.d('DBG', 'Debug - Response headers: ${response.headers}');
+        Log.d('DBG', 'Debug - Response body: ${response.body}');
 
-          episodes.forEach((season, seasonEpisodes) {
-            if (seasonEpisodes is! List) {
-              return;
-            }
-            final episodeList = <Map<String, dynamic>>[];
-            for (var i = 0; i < seasonEpisodes.length; i++) {
-              episodeList.add(
-                _normalizeXtreamEpisode(seasonEpisodes[i], season, i + 1),
-              );
-            }
-            result[season] = episodeList;
-          });
+        if (response.statusCode == 200) {
+          final data = json.decode(response.body);
+          if (data is Map<String, dynamic> && data['episodes'] != null) {
+            final episodes = data['episodes'] as Map<String, dynamic>;
+            final result = <String, List<Map<String, dynamic>>>{};
 
-          return result;
+            episodes.forEach((season, seasonEpisodes) {
+              if (seasonEpisodes is! List) {
+                return;
+              }
+              final episodeList = <Map<String, dynamic>>[];
+              for (var i = 0; i < seasonEpisodes.length; i++) {
+                episodeList.add(
+                  _normalizeXtreamEpisode(seasonEpisodes[i], season, i + 1),
+                );
+              }
+              result[season] = episodeList;
+            });
+
+            return result;
+          }
         }
+        return {};
+      } catch (e) {
+        Log.d("DBG", 'Get Series Episodes error: $e');
+        return {};
       }
-      return {};
-    } catch (e) {
-      Log.d("DBG", 'Get Series Episodes error: $e');
-      return {};
-    }
+    });
   }
 
   // Tüm arama geçmişini temizle
