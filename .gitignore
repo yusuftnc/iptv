@@ -46,3 +46,5 @@ app.*.map.json
 
 # Envied — gerçek sırlar (obfuscate.md)
 assets/.envied
+# Widget Preview related
+.widget_preview/
